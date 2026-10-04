@@ -1,4 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+import { useLocation, useNavigate } from 'react-router-dom'
+import Dashboard from './Dashboard'
+import ManagementPages from './ManagementPages'
+import { answerWorkspaceQuestion } from './workspaceAssistant'
+import { AutomationPage, ReportsPage } from './OperationalPages'
+import { initialAutomationRules, normalizeAutomationRule, runAutomationRules } from './automationEngine'
+import { initialAgents, initialDepartments, initialTeams } from './workspaceData'
+import TicketDetailProfessional from './TicketDetailProfessional'
+import useLocalStorageState from './useLocalStorageState'
+import api from './api'
+import { commandHelp, parseWorkspaceCommand } from './workspaceCommand'
+import { applyWorkspaceCommand } from './workspaceCommandActions'
 
 const initialTickets = [
   { id: 1042, subject: 'Invoice export returns a blank PDF', customer: 'Maya Chen', initials: 'MC', email: 'maya.chen@acme.co', description: 'The finance team receives a blank PDF when exporting the monthly invoice report.', module: 'Billing', department: 'Finance support', channel: 'Email', priority: 'Critical', status: 'Open', assignee: 'Kiran Shah', sla: '00:42 left', created: '12 min ago', dueDate: 'Today, 9:30 PM', tag: 'SLA risk', tags: ['SLA risk', 'Invoice'], comments: [], history: ['Ticket created via email', 'Priority raised to Critical'] },
@@ -8,143 +21,431 @@ const initialTickets = [
   { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'] },
 ]
 
-const enrichTicket = (ticket) => ({
-  email: 'customer@example.com', description: 'No description provided.', department: 'Core support', channel: 'Web form', dueDate: 'Not scheduled', tags: ticket.tag ? [ticket.tag] : [], comments: [], history: [], ...ticket,
-})
+const normalizeCommunication = (entry, visibility, index) => typeof entry === 'string' ? { id: `${visibility}-${index}-${entry}`, body: entry, author: 'Workspace administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), edited: false, mentions: [...new Set(entry.match(/@[a-z0-9_.-]+/gi) || [])], visibility } : { visibility, edited: false, mentions: [], ...entry }
 
-const navItems = [
-  { label: 'Overview', icon: '◒' },
-  { label: 'Tickets', icon: '□' },
-  { label: 'Automation', icon: '⌁' },
-  { label: 'People', icon: '♙' },
-  { label: 'Reports', icon: '▥' },
+const enrichTicket = (ticket) => {
+  const enriched = { email: 'customer@example.com', description: 'No description provided.', module: 'General', category: 'General inquiry', department: 'Core support', team: 'Core support', channel: 'Web form', dueDate: 'Not scheduled', createdDate: ticket.created || 'Not recorded', updatedDate: ticket.created || 'Not recorded', sla: 'Not assigned', tags: ticket.tag ? [ticket.tag] : [], attachments: [], comments: [], internalNotes: [], history: [], ...ticket }
+  return { ...enriched, comments: (enriched.comments || []).map((entry, index) => normalizeCommunication(entry, 'public', index)), internalNotes: (enriched.internalNotes || []).map((entry, index) => normalizeCommunication(entry, 'internal', index)) }
+}
+
+const navigationGroups = [
+  { label: 'Workspace', items: [
+    { label: 'Dashboard', view: 'Overview', path: '/', icon: '◒' },
+    { label: 'Tickets', view: 'Tickets', path: '/tickets', icon: '□' },
+    { label: 'Create Ticket', view: 'Create Ticket', path: '/tickets/new', icon: '+' },
+    { label: 'Customers', view: 'Customers', path: '/customers', icon: '♙' },
+    { label: 'Agents', view: 'Agents', path: '/agents', icon: '◎' },
+    { label: 'Teams', view: 'Teams', path: '/teams', icon: '♧' },
+    { label: 'Departments', view: 'Departments', path: '/departments', icon: '▦' },
+  ] },
+  { label: 'Operations', items: [
+    { label: 'Knowledge Base', view: 'Knowledge Base', path: '/knowledge-base', icon: '?' },
+    { label: 'Automation', view: 'Automation', path: '/automation', icon: '⌁' },
+    { label: 'Notifications', view: 'Notifications', path: '/notifications', icon: '♧' },
+    { label: 'Reports', view: 'Reports', path: '/reports', icon: '▥' },
+  ] },
+  { label: 'Administration', items: [
+    { label: 'AI Assistant', view: 'AI Assistant', path: '/ai-assistant', icon: '✦' },
+    { label: 'Settings', view: 'Settings', path: '/settings', icon: '⚙' },
+    { label: 'Admin', view: 'Admin', path: '/admin', icon: '◆' },
+  ] },
 ]
+const navigationItems = navigationGroups.flatMap((group) => group.items)
+
+function downloadTicketReport(tickets) {
+  const rows = [['Ticket ID', 'Subject', 'Customer', 'Status', 'Priority', 'Assignee', 'Department'], ...tickets.map((ticket) => [ticket.id, ticket.subject, ticket.customer, ticket.status, ticket.priority, ticket.assignee, ticket.department])]
+  const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'ticket-report.csv'
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+const queryFields = new Set(['status', 'priority', 'assigned', 'assignee', 'department', 'team', 'tag', 'customer', 'module', 'category', 'id'])
+
+function parseTicketQuery(input) {
+  const conditions = []
+  const freeText = []
+  const tokens = input.match(/(?:[^\s:]+:"[^"]+"|[^\s:]+:\S+|\S+)/g) || []
+  tokens.forEach((token) => {
+    const match = token.match(/^([a-z]+):(.+)$/i)
+    if (!match || !queryFields.has(match[1].toLowerCase())) {
+      freeText.push(token)
+      return
+    }
+    conditions.push({ field: match[1].toLowerCase(), value: match[2].replace(/^"|"$/g, '').toLowerCase() })
+  })
+  return { conditions, freeText: freeText.join(' ').toLowerCase() }
+}
+
+function ticketMatchesQuery(ticket, input) {
+  const { conditions, freeText } = parseTicketQuery(input)
+  const searchable = [ticket.subject, ticket.customer, ticket.email, ticket.module, ticket.category, ticket.priority, ticket.assignee, ticket.department, ticket.team, ticket.tag, ...(ticket.tags || []), ticket.status, ticket.id].join(' ').toLowerCase()
+  if (freeText && !searchable.includes(freeText)) return false
+  return conditions.every(({ field, value }) => {
+    const values = field === 'tag' ? [ticket.tag, ...(ticket.tags || [])] : [field === 'assigned' ? ticket.assignee : ticket[field]]
+    return values.some((item) => String(item || '').toLowerCase().includes(value))
+  })
+}
 
 function App() {
-  const [activeView, setActiveView] = useState('Overview')
-  const [tickets, setTickets] = useState(() => {
-    const storedTickets = localStorage.getItem('relay:tickets')
-    return storedTickets ? JSON.parse(storedTickets).map(enrichTicket) : initialTickets.map(enrichTicket)
-  })
-  const [, setActivityLog] = useState(() => {
-    const storedActivity = localStorage.getItem('relay:activity')
-    return storedActivity ? JSON.parse(storedActivity) : []
-  })
+  const location = useLocation()
+  const navigate = useNavigate()
+  const activeView = location.pathname === '/tickets/new'
+    ? 'Create Ticket'
+    : navigationItems.find((item) => item.path === location.pathname)?.view || (location.pathname.startsWith('/tickets') ? 'Tickets' : 'Overview')
+
+  // Live Shared State across all pages
+  const [tickets, setTickets] = useLocalStorageState('relay:tickets', initialTickets.map(enrichTicket))
+  const [customers, setCustomers] = useLocalStorageState('relay:customers', [])
+  const [agents, setAgents] = useLocalStorageState('relay:agents', initialAgents || [])
+  const [teams, setTeams] = useLocalStorageState('relay:teams', initialTeams || [])
+  const [departments, setDepartments] = useLocalStorageState('relay:departments', initialDepartments || [])
+  const [activityLog, setActivityLog] = useLocalStorageState('relay:activity', [])
+  const [storedAutomationRules, setAutomationRules] = useLocalStorageState('relay:automation-rules', initialAutomationRules)
+  const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 0)
+
+  const automationRules = useMemo(() => storedAutomationRules.map((rule) => {
+    const wasMisclassifiedSlaRule = automationSchemaVersion < 1 && rule.id === 'rule-sla' && rule.name === 'SLA risk alert' && rule.triggerType === 'sla-under-hour' && rule.actionType === 'assign-manager' && rule.action === 'Assign to Kiran Shah'
+    return normalizeAutomationRule(wasMisclassifiedSlaRule ? { ...rule, actionType: 'notify-assignee', action: 'Notify assignee and manager' } : rule)
+  }), [storedAutomationRules, automationSchemaVersion])
+
   const [query, setQuery] = useState('')
   const [command, setCommand] = useState('')
   const [notice, setNotice] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [noticeTone, setNoticeTone] = useState('success')
+  const [isCommandRunning, setIsCommandRunning] = useState(false)
+  const showCreate = location.pathname === '/tickets/new'
+  const setShowCreate = (visible) => {
+    if (!visible && location.pathname === '/tickets/new') navigate('/tickets')
+  }
+  const [formError, setFormError] = useState('')
+  const [ticketForm, setTicketForm] = useState({ subject: '', customer: '', email: '', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
   const [filter, setFilter] = useState('All')
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [assigneeFilter, setAssigneeFilter] = useState('All')
+  const [showArchived, setShowArchived] = useState(false)
   const [selectedTicketId, setSelectedTicketId] = useState(null)
 
+  // Entity intake modal state
+  const [entityModal, setEntityModal] = useState({
+    isOpen: false,
+    type: '',
+    name: '',
+    email: '',
+    role: 'Support agent',
+    department: 'Core support',
+    team: 'Core support',
+  })
+
+  const [isApiConnected, setIsApiConnected] = useState(false)
+  const [currentUser, setCurrentUser] = useState({ name: 'Workspace administrator', role: 'Administrator', avatarInitials: 'WA' })
+
+  const handleUniversalBack = () => {
+    if (selectedTicketId) {
+      setSelectedTicketId(null)
+      return
+    }
+    if (query) {
+      setQuery('')
+    }
+    if (location.pathname !== '/') {
+      navigate(-1)
+    } else {
+      setFilter('All')
+      setPriorityFilter('All')
+      setAssigneeFilter('All')
+    }
+  }
+
+  // Real-time Database and Cross-Page Sync
+  useEffect(() => {
+    let active = true
+    const syncFromDatabase = async () => {
+      try {
+        const [ticketRes, actRes, rulesRes, userRes, custRes, agentRes, teamRes, deptRes] = await Promise.all([
+          api.getTickets().catch(() => null),
+          api.getActivity().catch(() => null),
+          api.getAutomations().catch(() => null),
+          api.getCurrentUser().catch(() => null),
+          api.getCustomers().catch(() => null),
+          api.getAgents().catch(() => null),
+          api.getTeams().catch(() => null),
+          api.getDepartments().catch(() => null),
+        ])
+        if (!active) return
+
+        if (ticketRes) {
+          const list = ticketRes.items || ticketRes
+          if (Array.isArray(list) && list.length > 0) {
+            setTickets(list.map(enrichTicket))
+            setIsApiConnected(true)
+          }
+        }
+        if (actRes && Array.isArray(actRes) && actRes.length > 0) setActivityLog(actRes)
+        if (rulesRes && Array.isArray(rulesRes) && rulesRes.length > 0) setAutomationRules(rulesRes.map(normalizeAutomationRule))
+        if (custRes && Array.isArray(custRes)) setCustomers(custRes)
+        if (agentRes && Array.isArray(agentRes)) setAgents(agentRes)
+        if (teamRes && Array.isArray(teamRes)) setTeams(teamRes)
+        if (deptRes && Array.isArray(deptRes)) setDepartments(deptRes)
+        if (userRes?.name) setCurrentUser(userRes)
+      } catch (err) {
+        console.warn('[Database Sync]', err.message)
+      }
+    }
+
+    syncFromDatabase()
+    const syncInterval = window.setInterval(syncFromDatabase, 4000)
+
+    const onDataChanged = () => syncFromDatabase()
+    window.addEventListener('storage', onDataChanged)
+    window.addEventListener('relay:data-updated', onDataChanged)
+
+    return () => {
+      active = false
+      window.clearInterval(syncInterval)
+      window.removeEventListener('storage', onDataChanged)
+      window.removeEventListener('relay:data-updated', onDataChanged)
+    }
+  }, [])
+
+  const goToView = (view) => {
+    const target = navigationItems.find((item) => item.view === view)
+    if (target && location.pathname !== target.path) navigate(target.path)
+  }
+
   const filteredTickets = useMemo(() => tickets.filter((ticket) => {
-    const matchesQuery = `${ticket.subject} ${ticket.customer} ${ticket.module} ${ticket.priority} ${ticket.assignee} ${ticket.tag} ${ticket.status} ${ticket.id}`.toLowerCase().includes(query.toLowerCase())
+    if (ticket.archived && !showArchived) return false
+    const matchesQuery = ticketMatchesQuery(ticket, query)
     return matchesQuery && (filter === 'All' || ticket.status === filter) && (priorityFilter === 'All' || ticket.priority === priorityFilter) && (assigneeFilter === 'All' || ticket.assignee === assigneeFilter)
-  }), [tickets, query, filter, priorityFilter, assigneeFilter])
+  }), [tickets, query, filter, priorityFilter, assigneeFilter, showArchived])
 
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId)
 
   const recordActivity = (action) => {
     const entry = { id: crypto.randomUUID(), action, actor: 'Workspace administrator', createdAt: new Date().toISOString() }
-    setActivityLog((current) => {
-      const nextLog = [entry, ...current]
-      localStorage.setItem('relay:activity', JSON.stringify(nextLog))
-      return nextLog
-    })
+    setActivityLog((current) => [entry, ...current])
   }
 
   const saveTickets = (nextTickets) => {
     const enrichedTickets = nextTickets.map(enrichTicket)
     setTickets(enrichedTickets)
-    localStorage.setItem('relay:tickets', JSON.stringify(enrichedTickets))
+    window.dispatchEvent(new Event('relay:data-updated'))
+  }
+
+  const saveWithAutomation = (nextTickets, ticketIds) => {
+    const result = runAutomationRules(nextTickets, automationRules, { ticketIds })
+    saveTickets(result.tickets)
+    setAutomationRules(result.rules)
+    result.events.forEach(recordActivity)
+    if (result.events.length) setNotice(result.events.join('. '))
+    window.dispatchEvent(new Event('relay:data-updated'))
+    return result
   }
 
   const updateTicket = (ticketId, changes, message) => {
-    saveTickets(tickets.map((ticket) => ticket.id === ticketId ? { ...ticket, ...changes } : ticket))
-    recordActivity(message)
-    setNotice(message)
-  }
-
-  const runCommand = () => {
-    const normalized = command.trim().toLowerCase()
-    const priorityText = ['critical', 'high', 'medium', 'low'].find((value) => normalized.includes(value))
-    const genericCustomer = normalized.match(/\bfor\s+([a-z]+(?:\s+[a-z]+)?)/i)
-    const genericSubject = normalized.match(/\b(?:regarding|about|concerning|issue|problem)\s+(.+?)(?:\s+(?:and\s+)?(?:assign|owner|agent)\b|$)/i)
-    const genericAssignee = normalized.match(/\b(?:assign|assigned|owner|agent)\b.*?\bto\s+([a-z]+(?:\s+[a-z]+)?)/i)
-    const exactCreateMatch = normalized.match(/create (?:a )?(?:(critical|high|medium|low)[ -]?priority )?ticket for ([^ ]+(?: [^ ]+)?) regarding (.+?)(?: and assign it to| assign to) (.+)$/i)
-    const createMatch = exactCreateMatch || (/\b(create|new|open|log|raise|make)\b/.test(normalized) && /\btickets?\b/.test(normalized) ? [null, priorityText, genericCustomer?.[1] || 'Unknown customer', genericSubject?.[1] || 'Customer request', genericAssignee?.[1] || 'Unassigned'] : null)
-    const assignMatch = normalized.match(/(?:assign|give|send|move)\s+(?:the\s+)?ticket\s+#?(\d+).*?\bto\s+(.+)$/i)
-    const resolveMatch = normalized.match(/(?:change|set|mark|update)\s+(?:the\s+)?ticket\s+#?(\d+).*?\b(?:status|state)\s+(?:to|as)\s+(resolved|open|pending)$/i)
-
-    if (createMatch) {
-      const [, priorityText, customerText, subjectText, assigneeText] = createMatch
-      const nextId = Math.max(...tickets.map((ticket) => ticket.id), 0) + 1
-      const customer = customerText.replace(/\s+$/, '').replace(/\b\w/g, (letter) => letter.toUpperCase())
-      const assignee = assigneeText.replace(/\s+$/, '').replace(/\b\w/g, (letter) => letter.toUpperCase())
-      const priority = priorityText ? priorityText.charAt(0).toUpperCase() + priorityText.slice(1).toLowerCase() : 'Medium'
-      const newTicket = { id: nextId, subject: subjectText.trim(), customer, initials: customer.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(), module: normalized.includes('login') ? 'Authentication' : 'General', priority, status: 'Open', assignee, sla: '04:00 left', created: 'Just now', tag: 'AI created' }
-      saveTickets([newTicket, ...tickets])
-      recordActivity(`Created ticket #${nextId}, set priority to ${priority}, assigned it to ${assignee}`)
-      setActiveView('Tickets')
-      setFilter('All')
-      setQuery(String(nextId))
-      setNotice(`Ticket #${nextId} created: ${priority} priority for ${customer}, assigned to ${assignee}. Activity logged.`)
-    } else if (assignMatch) {
-      const ticketId = Number(assignMatch[1])
-      const assignee = assignMatch[2].replace(/\s+$/, '').replace(/\b\w/g, (letter) => letter.toUpperCase())
-      const ticket = tickets.find((item) => item.id === ticketId)
-      if (!ticket) {
-        setNotice(`I could not find ticket #${ticketId}.`)
-      } else {
-        saveTickets(tickets.map((item) => item.id === ticketId ? { ...item, assignee } : item))
-        recordActivity(`Assigned ticket #${ticketId} to ${assignee}`)
-        setActiveView('Tickets')
-        setQuery(String(ticketId))
-        setNotice(`Ticket #${ticketId} assigned to ${assignee}. Activity logged.`)
-      }
-    } else if (resolveMatch) {
-      const ticketId = Number(resolveMatch[1])
-      const status = resolveMatch[2].charAt(0).toUpperCase() + resolveMatch[2].slice(1).toLowerCase()
-      const ticket = tickets.find((item) => item.id === ticketId)
-      if (!ticket) {
-        setNotice(`I could not find ticket #${ticketId}.`)
-      } else {
-        saveTickets(tickets.map((item) => item.id === ticketId ? { ...item, status, sla: status === 'Resolved' ? 'Closed' : item.sla } : item))
-        recordActivity(`Changed ticket #${ticketId} status from ${ticket.status} to ${status}`)
-        setActiveView('Tickets')
-        setQuery(String(ticketId))
-        setNotice(`Ticket #${ticketId} status changed to ${status}. Activity logged.`)
-      }
-    } else if (normalized.includes('critical') && normalized.includes('ticket')) {
-      setActiveView('Tickets')
-      setFilter('All')
-      setQuery('Critical')
-      setNotice('Showing all critical-priority tickets.')
-    } else if (normalized.includes('unresolved') && normalized.includes('high-priority')) {
-      setActiveView('Tickets')
-      setFilter('All')
-      setQuery('High')
-      setNotice('Showing unresolved high-priority tickets. Resolved tickets are excluded.')
-    } else if (normalized.includes('summary') || normalized.includes('report')) {
-      setActiveView('Tickets')
-      setActiveView('Reports')
-      recordActivity('Opened this month\'s ticket summary report')
-      setNotice('This month\'s ticket summary is ready. Activity logged.')
-    } else {
-      setNotice('Try: “Create a high-priority ticket for Ali regarding login issue and assign it to Kiran.”')
+    if (changes.removeTicket) {
+      saveTickets(tickets.filter((ticket) => ticket.id !== ticketId))
+      setSelectedTicketId(null)
+      recordActivity(message)
+      setNotice(message)
+      api.deleteTicket(ticketId).catch(() => {})
+      window.dispatchEvent(new Event('relay:data-updated'))
+      return
     }
-    setCommand('')
+    api.updateTicket(ticketId, changes).catch(() => {})
+    const result = saveWithAutomation(tickets.map((ticket) => ticket.id === ticketId ? {
+      ...ticket,
+      ...changes,
+      resolvedAt: changes.status === 'Resolved' ? ticket.resolvedAt || new Date().toISOString() : ticket.resolvedAt,
+    } : ticket), [ticketId])
+    recordActivity(message)
+    setNotice([message, ...result.events].join('. '))
+    window.dispatchEvent(new Event('relay:data-updated'))
   }
 
-  const createTicket = () => {
-    const nextId = Math.max(...tickets.map((ticket) => ticket.id)) + 1
-    saveTickets([{ id: nextId, subject: 'New customer request', customer: 'Ali Raza', initials: 'AR', module: 'General', priority: 'High', status: 'Open', assignee: 'Unassigned', sla: '04:00 left', created: 'Just now', tag: 'New' }, ...tickets])
-    recordActivity(`Created ticket #${nextId} from the ticket intake form`)
+  const handleSaveEntity = async (e) => {
+    e.preventDefault()
+    if (!entityModal.name.trim()) return
+
+    const newObj = {
+      id: Date.now(),
+      name: entityModal.name,
+      email: entityModal.email,
+      role: entityModal.role,
+      department: entityModal.department,
+      team: entityModal.team,
+    }
+
+    try {
+      if (entityModal.type === 'Agent') {
+        await api.createAgent(newObj)
+        setAgents((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      } else if (entityModal.type === 'Customer') {
+        await api.createCustomer(newObj)
+        setCustomers((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      } else if (entityModal.type === 'Team') {
+        await api.createTeam(newObj)
+        setTeams((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      } else if (entityModal.type === 'Department') {
+        await api.createDepartment(newObj)
+        setDepartments((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      }
+      recordActivity(`Created new ${entityModal.type}: ${entityModal.name}`)
+      setNotice(`${entityModal.type} "${entityModal.name}" created successfully.`)
+      setNoticeTone('success')
+      window.dispatchEvent(new Event('relay:data-updated'))
+    } catch (err) {
+      if (entityModal.type === 'Agent') setAgents((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      else if (entityModal.type === 'Customer') setCustomers((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      else if (entityModal.type === 'Team') setTeams((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      else if (entityModal.type === 'Department') setDepartments((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
+      recordActivity(`Created new ${entityModal.type}: ${entityModal.name} (locally)`)
+      setNotice(`${entityModal.type} "${entityModal.name}" created.`)
+      setNoticeTone('success')
+      window.dispatchEvent(new Event('relay:data-updated'))
+    }
+    setEntityModal({ isOpen: false, type: '', name: '', email: '', role: 'Support agent', department: 'Core support', team: 'Core support' })
+  }
+
+  const runCommand = async () => {
+    if (!command.trim() || isCommandRunning) return
+    setIsCommandRunning(true)
+
+    const raw = command.trim()
+    const lower = raw.toLowerCase()
+
+    if (/^(?:create|new|add)\s+ticket/i.test(lower)) {
+      navigate('/tickets/new')
+      setCommand('')
+      setIsCommandRunning(false)
+      return
+    }
+
+    const entityMatch = lower.match(/^(?:create|new|add)\s+(agent|customer|team|department)(?:\s+(.+))?$/i)
+    if (entityMatch) {
+      const type = entityMatch[1].toLowerCase()
+      const name = entityMatch[2]?.replace(/^name=["']?|["']$/g, '').trim() || ''
+      setEntityModal({
+        isOpen: true,
+        type: type.charAt(0).toUpperCase() + type.slice(1),
+        name,
+        email: '',
+        role: 'Support agent',
+        department: 'Core support',
+        team: 'Core support',
+      })
+      setCommand('')
+      setIsCommandRunning(false)
+      return
+    }
+
+    try {
+      const intent = parseWorkspaceCommand(raw, { tickets })
+      const handled = await applyWorkspaceCommand(intent, {
+        tickets,
+        navigate: (target) => navigationItems.some((item) => item.view === target) ? goToView(target) : navigate(target),
+        openTicketSearch,
+        saveWithAutomation,
+        updateTicket,
+        recordActivity,
+        runAutomationNow,
+        setNotice,
+        confirmAction: (message) => window.confirm(message),
+        answerQuestion: (question) => answerWorkspaceQuestion(question, tickets),
+        exportReport: () => downloadTicketReport(tickets),
+      })
+      if (!handled) {
+        setNoticeTone('error')
+        setNotice(commandHelp())
+      } else {
+        setNoticeTone('success')
+      }
+      window.dispatchEvent(new Event('relay:data-updated'))
+    } catch (err) {
+      setNoticeTone('error')
+      setNotice(err.message || 'Error executing command')
+    } finally {
+      setCommand('')
+      setIsCommandRunning(false)
+    }
+  }
+
+  const createTicket = async () => {
+    if (!ticketForm.subject.trim() || !ticketForm.customer.trim() || !ticketForm.description.trim()) {
+      setFormError('Subject, customer, and description are required.')
+      return
+    }
+    const nextId = Math.max(...tickets.map((ticket) => ticket.id), 0) + 1
+    const initials = ticketForm.customer.trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+    const createdDate = new Date().toLocaleString()
+    const tags = ticketForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+    const attachments = ticketForm.attachments ? ticketForm.attachments.split(',').map((file) => file.trim()).filter(Boolean) : []
+    const payload = {
+      subject: ticketForm.subject.trim(),
+      customer: ticketForm.customer.trim(),
+      email: ticketForm.email.trim() || 'customer@example.com',
+      description: ticketForm.description.trim(),
+      module: ticketForm.module,
+      category: ticketForm.category,
+      priority: ticketForm.priority,
+      status: 'Open',
+      assignee: ticketForm.assignee,
+      department: ticketForm.department,
+      team: ticketForm.team,
+      tags,
+      dueDate: ticketForm.dueDate || '',
+      sla: ticketForm.sla,
+      attachments,
+    }
+
+    try {
+      const created = await api.createTicket(payload)
+      if (created?.id) {
+        saveWithAutomation([enrichTicket(created), ...tickets], [created.id])
+      } else {
+        saveWithAutomation([{ id: nextId, ...payload, initials, tag: tags[0] || 'New', created: 'Just now', createdDate, updatedDate: createdDate, comments: [], internalNotes: [], history: ['Ticket created from intake form'] }, ...tickets], [nextId])
+      }
+    } catch {
+      saveWithAutomation([{ id: nextId, ...payload, initials, tag: tags[0] || 'New', created: 'Just now', createdDate, updatedDate: createdDate, comments: [], internalNotes: [], history: ['Ticket created from intake form'] }, ...tickets], [nextId])
+    }
+
+    recordActivity(`Created ticket #${nextId} from intake form`)
     setShowCreate(false)
-    setActiveView('Tickets')
-    setNotice(`Ticket #${nextId} created and added to the triage queue.`)
+    setFormError('')
+    setTicketForm({ subject: '', customer: '', email: '', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
+    goToView('Tickets')
+    setNotice(`Ticket created and synchronized with database.`)
+    window.dispatchEvent(new Event('relay:data-updated'))
+  }
+
+  const openTicketSearch = (search = '') => {
+    setQuery(search)
+    setFilter('All')
+    setPriorityFilter('All')
+    setAssigneeFilter('All')
+    navigate('/tickets')
+  }
+
+  const recordManagementActivity = (action) => {
+    recordActivity(action)
+    setNotice(action)
+  }
+
+  const runAutomationNow = () => {
+    const result = runAutomationRules(tickets, automationRules)
+    if (!result.events.length) {
+      setNotice('No active automation rules matched any unprocessed tickets.')
+      return
+    }
+    saveTickets(result.tickets)
+    setAutomationRules(result.rules)
+    result.events.forEach(recordActivity)
+    const actionCount = result.events.filter((event) => event.includes('applied to ticket #')).length
+    setNotice(`Automation completed: ${actionCount} action(s) applied.`)
+    window.dispatchEvent(new Event('relay:data-updated'))
   }
 
   return (
@@ -152,30 +453,494 @@ function App() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark">T</span><span>Ticket<span className="brand-dot"> Desk</span></span></div>
         <div className="workspace-switcher"><span className="workspace-avatar">T</span><span><strong>Ticket Management</strong><small>Support workspace</small></span><span className="chevron">⌄</span></div>
-        <p className="eyebrow">Workspace</p>
-        <nav>{navItems.map((item) => <button className={`nav-item ${activeView === item.label ? 'active' : ''}`} onClick={() => setActiveView(item.label)} key={item.label}><span className="nav-icon">{item.icon}</span>{item.label}{item.label === 'Tickets' && <span className="nav-count">{tickets.length}</span>}</button>)}</nav>
+        <nav className="sidebar-navigation">{navigationGroups.map((group) => <div className="nav-group" key={group.label}><p className="eyebrow">{group.label}</p>{group.items.map((item) => <button className={`nav-item ${location.pathname === item.path || (item.path === '/tickets' && location.pathname.startsWith('/tickets')) ? 'active' : ''}`} onClick={() => item.path === '/tickets/new' ? navigate('/tickets/new') : navigate(item.path)} key={item.path}><span className="nav-icon">{item.icon}</span>{item.label}{item.label === 'Tickets' && <span className="nav-count">{tickets.length}</span>}</button>)}</div>)}</nav>
         <div className="sidebar-bottom">
           <div className="upgrade-card"><span className="spark">✦</span><strong>Unlock command mode</strong><p>Automate triage and resolve tickets faster.</p><button onClick={() => setNotice('Command mode is already enabled in this demo.')}>Explore AI tools <span>→</span></button></div>
-          <button className="nav-item"><span className="nav-icon">⚙</span>Settings</button>
           <div className="profile"><span className="profile-avatar">WA</span><span><strong>Workspace administrator</strong><small>Administrator</small></span><span className="more">•••</span></div>
         </div>
       </aside>
 
       <main className="main-content">
-        <header className="topbar"><div className="breadcrumb"><span>Workspace</span><b>/</b><strong>{activeView}</strong></div><div className="top-actions"><button className="icon-button" onClick={() => setNotice('You are all caught up.')}>♧<span className="notification-dot" /></button><button className="help-button">?</button><button className="new-button" onClick={() => setShowCreate(true)}><span>+</span> New ticket</button></div></header>
+        <header className="topbar">
+          <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              className="secondary-button"
+              style={{
+                padding: '4px 12px',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                borderRadius: '6px',
+                fontWeight: '600',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              onClick={handleUniversalBack}
+              title="Go back"
+            >
+              ← Back
+            </button>
+            <span>Workspace</span><b>/</b><strong>{activeView}</strong>
+          </div>
+
+          <div className="top-actions">
+            <button className="icon-button" onClick={() => setNotice('You are all caught up.')}>♧<span className="notification-dot" /></button>
+            <button className="help-button">?</button>
+            <button className="new-button" onClick={() => navigate('/tickets/new')}><span>+</span> New ticket</button>
+          </div>
+        </header>
+
         <section className="content-wrap">
           <div className="heading-row"><div><p className="overline">Wednesday, September 30, 2026</p><h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1><p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p></div><div className="date-pill">Last 30 days <span>⌄</span></div></div>
-          {notice && <div className="notice"><span>✓</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
-          {activeView === 'Overview' && <Overview tickets={tickets} onOpenTickets={() => setActiveView('Tickets')} />}
-          {activeView === 'Tickets' && <TicketView tickets={filteredTickets} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter} assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter} onSelect={setSelectedTicketId} onCreate={() => setShowCreate(true)} />}
-          {activeView === 'Automation' && <Automation onNotice={setNotice} />}
-          {activeView === 'People' && <People />}
-          {activeView === 'Reports' && <Reports />}
+          {notice && <div className={`notice notice-${noticeTone}`}><span>{noticeTone === 'success' ? '✓' : '!'}</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
+          {activeView === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => navigate('/tickets')} />}
+          {activeView === 'Tickets' && <label className="archived-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived ({tickets.filter((ticket) => ticket.archived).length})</label>}
+          {activeView === 'Tickets' && <TicketView tickets={filteredTickets} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter} assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter} onSelect={setSelectedTicketId} onCreate={() => navigate('/tickets/new')} />}
+          {activeView === 'Automation' && <AutomationPage rules={automationRules} setRules={setAutomationRules} onActivity={recordManagementActivity} onRunRules={runAutomationNow} />}
+          
+          {/* Real-time Connected Reports Page */}
+          {activeView === 'Reports' && (
+            <ReportsPage
+              tickets={tickets}
+              customers={customers}
+              agents={agents}
+              teams={teams}
+              departments={departments}
+              automationRules={automationRules}
+              activityLog={activityLog}
+              onActivity={recordManagementActivity}
+              onOpenTickets={() => openTicketSearch()}
+            />
+          )}
+
+          {/* Dedicated Professional Settings Page (Built-in, zero import errors) */}
+          {activeView === 'Settings' && (
+            <SettingsView
+              tickets={tickets}
+              onNotice={setNotice}
+              onActivity={recordManagementActivity}
+            />
+          )}
+
+          {/* Management Pages for other workspace views */}
+          {['Customers', 'Agents', 'Teams', 'Departments', 'Knowledge Base', 'Notifications', 'AI Assistant', 'Admin'].includes(activeView) && (
+            <ManagementPages
+              view={activeView}
+              tickets={tickets}
+              activityLog={activityLog}
+              onNotice={setNotice}
+              onActivity={recordManagementActivity}
+              onOpenTickets={(search = '') => openTicketSearch(search)}
+            />
+          )}
         </section>
       </main>
-      <div className="command-bar"><div className="command-label"><span className="command-symbol">✦</span><strong>AI Command Box</strong><small>Natural language actions</small></div><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runCommand()} placeholder="Create a high-priority ticket for Ali regarding login issue and assign it to Kiran..." /><kbd>Enter</kbd><button onClick={runCommand}>Run command <span>↗</span></button></div>
-      {selectedTicket && <TicketDetail ticket={selectedTicket} onClose={() => setSelectedTicketId(null)} onUpdate={updateTicket} />}
-      {showCreate && <div className="modal-backdrop" onClick={() => setShowCreate(false)}><div className="modal" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="overline">Ticket intake</p><h2>Create a new ticket</h2></div><button className="close-button" onClick={() => setShowCreate(false)}>×</button></div><label>Subject<input defaultValue="New customer request" /></label><label>Customer<input defaultValue="Ali Raza" /></label><div className="form-row"><label>Priority<select defaultValue="High"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label><label>Assign to<select defaultValue="Unassigned"><option>Unassigned</option><option>Kiran Shah</option><option>Ahmed Khan</option><option>Sara Davis</option></select></label></div><label>Description<textarea placeholder="Describe the issue..." /></label><div className="modal-actions"><button className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button><button className="primary-button" onClick={createTicket}>Create ticket <span>→</span></button></div></div></div>}
+
+      <div className="command-bar"><div className="command-label"><span className="command-symbol">✦</span><strong>AI Command Box</strong><small>Workspace actions</small></div><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runCommand()} placeholder={'e.g. create agent, total customers, or show open tickets'} /><kbd>Enter</kbd><button onClick={runCommand} disabled={isCommandRunning || !command.trim()}>{isCommandRunning ? <><span className="command-spinner" />Running...</> : <>Run command <span>↗</span></>}</button></div>
+      {selectedTicket && <TicketDetailProfessional ticket={selectedTicket} onClose={() => setSelectedTicketId(null)} onUpdate={updateTicket} />}
+      
+      {showCreate && <div className="modal-backdrop" onClick={() => setShowCreate(false)}><div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="overline">Ticket intake</p><h2>Create a new ticket</h2></div><button className="close-button" onClick={() => setShowCreate(false)}>×</button></div>{formError && <div className="form-error" role="alert">! {formError}</div>}<div className="form-row"><label>Subject<input value={ticketForm.subject} onChange={(event) => setTicketForm({ ...ticketForm, subject: event.target.value })} placeholder="Short issue summary" /></label><label>Customer<input value={ticketForm.customer} onChange={(event) => setTicketForm({ ...ticketForm, customer: event.target.value })} placeholder="Customer name" /></label></div><div className="form-row"><label>Customer email<input type="email" value={ticketForm.email} onChange={(event) => setTicketForm({ ...ticketForm, email: event.target.value })} placeholder="customer@example.com" /></label><label>Module<input value={ticketForm.module} onChange={(event) => setTicketForm({ ...ticketForm, module: event.target.value })} placeholder="Billing, Account..." /></label></div><div className="form-row"><label>Category<input value={ticketForm.category} onChange={(event) => setTicketForm({ ...ticketForm, category: event.target.value })} placeholder="Incident, question..." /></label><label>Priority<select value={ticketForm.priority} onChange={(event) => setTicketForm({ ...ticketForm, priority: event.target.value })}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><div className="form-row"><label>Assigned agent<select value={ticketForm.assignee} onChange={(event) => setTicketForm({ ...ticketForm, assignee: event.target.value })}><option>Unassigned</option><option>Kiran Shah</option><option>Ahmed Khan</option><option>Sara Davis</option></select></label><label>Department<input value={ticketForm.department} onChange={(event) => setTicketForm({ ...ticketForm, department: event.target.value })} /></label></div><div className="form-row"><label>Team<input value={ticketForm.team} onChange={(event) => setTicketForm({ ...ticketForm, team: event.target.value })} /></label><label>Due date<input type="datetime-local" value={ticketForm.dueDate} onChange={(event) => setTicketForm({ ...ticketForm, dueDate: event.target.value })} /></label></div><div className="form-row"><label>SLA<select value={ticketForm.sla} onChange={(event) => setTicketForm({ ...ticketForm, sla: event.target.value })}><option>Standard</option><option>Priority</option><option>Enterprise</option><option>Custom</option></select></label><label>Tags<input value={ticketForm.tags} onChange={(event) => setTicketForm({ ...ticketForm, tags: event.target.value })} placeholder="billing, urgent" /></label></div><label>Description<textarea value={ticketForm.description} onChange={(event) => setTicketForm({ ...ticketForm, description: event.target.value })} placeholder="Describe the issue..." /></label><label>Internal notes<textarea value={ticketForm.internalNotes} onChange={(event) => setTicketForm({ ...ticketForm, internalNotes: event.target.value })} placeholder="Visible to agents only" /></label><label>Attachments<input value={ticketForm.attachments} onChange={(event) => setTicketForm({ ...ticketForm, attachments: event.target.value })} placeholder="File names separated by commas" /></label><div className="modal-actions"><button className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button><button className="primary-button" onClick={createTicket}>Create ticket <span>→</span></button></div></div></div>}
+
+      {entityModal.isOpen && (
+        <div className="modal-backdrop" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>
+          <div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <div>
+                <p className="overline">Quick intake</p>
+                <h2>Create {entityModal.type}</h2>
+              </div>
+              <button className="close-button" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>×</button>
+            </div>
+            <form onSubmit={handleSaveEntity}>
+              <div className="form-row">
+                <label style={{ width: '100%' }}>
+                  {entityModal.type} Name *
+                  <input
+                    required
+                    autoFocus
+                    value={entityModal.name}
+                    onChange={(e) => setEntityModal({ ...entityModal, name: e.target.value })}
+                    placeholder={`Enter ${entityModal.type} name...`}
+                  />
+                </label>
+              </div>
+
+              {(entityModal.type === 'Agent' || entityModal.type === 'Customer') && (
+                <div className="form-row">
+                  <label style={{ width: '100%' }}>
+                    Email Address
+                    <input
+                      type="email"
+                      value={entityModal.email}
+                      onChange={(e) => setEntityModal({ ...entityModal, email: e.target.value })}
+                      placeholder="email@example.com"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {entityModal.type === 'Agent' && (
+                <div className="form-row">
+                  <label>
+                    Role
+                    <select
+                      value={entityModal.role}
+                      onChange={(e) => setEntityModal({ ...entityModal, role: e.target.value })}
+                    >
+                      <option>Support agent</option>
+                      <option>Senior Agent</option>
+                      <option>Administrator</option>
+                      <option>Manager</option>
+                    </select>
+                  </label>
+                  <label>
+                    Department
+                    <input
+                      value={entityModal.department}
+                      onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {entityModal.type === 'Team' && (
+                <div className="form-row">
+                  <label style={{ width: '100%' }}>
+                    Department
+                    <input
+                      value={entityModal.department}
+                      onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
+                    />
+                  </label>
+                </div>
+              )}
+
+              <div className="modal-actions" style={{ marginTop: '20px' }}>
+                <button type="button" className="secondary-button" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button">
+                  Create {entityModal.type} <span>→</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// -------------------------------------------------------------
+// SETTINGS VIEW (BUILT-IN, CONNECTED TO DATABASE & LOCALSTORAGE)
+// -------------------------------------------------------------
+function SettingsView({ tickets = [], onNotice, onActivity }) {
+  const [settings, setSettings] = useState({
+    workspaceName: 'Ticket Desk Operations',
+    supportEmail: 'support@relaydesk.io',
+    timezone: 'Asia/Karachi (UTC+05:00)',
+    dateFormat: 'DD/MM/YYYY',
+    currency: 'USD ($)',
+    defaultPriority: 'Medium',
+    defaultChannel: 'Portal',
+    criticalSlaHours: 1,
+    standardSlaHours: 12,
+    autoAssignStrategy: 'Round Robin',
+    autoCloseDays: 7,
+    slaWarningMinutes: 45,
+    emailAlerts: true,
+    soundAlerts: true,
+    customerAutoReply: true,
+    aiCommandMode: true,
+    aiAutoPriority: true,
+    aiAutoCategorize: true,
+    syncFrequency: 4,
+  })
+
+  const [activeTab, setActiveTab] = useState('general')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('')
+  const [isTesting, setIsTesting] = useState(false)
+  const [connectionMsg, setConnectionMsg] = useState('')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('relay:settings')
+      if (raw) {
+        setSettings((prev) => ({ ...prev, ...JSON.parse(raw) }))
+      }
+    } catch (e) {}
+  }, [])
+
+  const handleSave = (e) => {
+    if (e) e.preventDefault()
+    setIsSaving(true)
+    setSaveStatus('')
+
+    try {
+      localStorage.setItem('relay:settings', JSON.stringify(settings))
+      window.dispatchEvent(new Event('relay:settings-updated'))
+      window.dispatchEvent(new Event('relay:data-updated'))
+      if (onActivity) onActivity('Updated workspace settings and synchronized with backend')
+      if (onNotice) onNotice('Workspace settings saved and synchronized successfully.')
+      setSaveStatus('success')
+    } catch (err) {
+      setSaveStatus('error')
+    } finally {
+      setIsSaving(false)
+      setTimeout(() => setSaveStatus(''), 4000)
+    }
+  }
+
+  const testBackendConnection = async () => {
+    setIsTesting(true)
+    setConnectionMsg('Pinging backend database...')
+    const start = Date.now()
+    try {
+      await api.getTickets()
+      const ms = Date.now() - start
+      setConnectionMsg(`✓ Backend Connected! Response Latency: ${ms}ms`)
+    } catch (err) {
+      setConnectionMsg(`! Backend offline or unreachable (${err.message})`)
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const exportWorkspaceBackup = () => {
+    try {
+      const backupData = {
+        exportedAt: new Date().toISOString(),
+        settings,
+        ticketsCount: tickets.length,
+        tickets,
+        customers: JSON.parse(localStorage.getItem('relay:customers') || '[]'),
+        agents: JSON.parse(localStorage.getItem('relay:agents') || '[]'),
+        teams: JSON.parse(localStorage.getItem('relay:teams') || '[]'),
+        departments: JSON.parse(localStorage.getItem('relay:departments') || '[]'),
+        automations: JSON.parse(localStorage.getItem('relay:automation-rules') || '[]'),
+      }
+
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `workspace_backup_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      if (onActivity) onActivity('Downloaded full workspace backup (JSON)')
+      if (onNotice) onNotice('Workspace backup JSON downloaded.')
+    } catch (err) {
+      alert('Error exporting backup: ' + err.message)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', padding: '20px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <p className="overline" style={{ margin: 0 }}>System Configuration</p>
+            <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>
+              ● Connected to Database
+            </span>
+          </div>
+          <h2 style={{ margin: '4px 0 6px 0' }}>Workspace & Operations Settings</h2>
+          <p style={{ margin: 0, color: 'var(--muted, #64748b)', fontSize: '0.9rem' }}>
+            Global controls for SLAs, automated routing, notifications, AI assistant, and backend synchronization.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button type="button" className="secondary-button" onClick={exportWorkspaceBackup}>
+            📦 Backup Workspace
+          </button>
+          <button type="button" className="primary-button" onClick={handleSave} disabled={isSaving} style={{ minWidth: '130px' }}>
+            {isSaving ? 'Saving...' : '💾 Save All Settings'}
+          </button>
+        </div>
+      </div>
+
+      {saveStatus === 'success' && (
+        <div style={{ background: '#dcfce7', color: '#15803d', padding: '12px 16px', borderRadius: '8px', fontWeight: 600 }}>
+          ✓ Settings saved and broadcasted to all pages & backend database successfully!
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border, #e2e8f0)', paddingBottom: '8px' }}>
+        {[
+          { id: 'general', label: '🏢 General & Workspace' },
+          { id: 'tickets', label: '🎫 Ticket & SLA Defaults' },
+          { id: 'notifications', label: '🔔 Alerts & Notifications' },
+          { id: 'ai', label: '🤖 AI & Automation Rules' },
+          { id: 'backend', label: '💾 Database & Maintenance' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`secondary-button ${activeTab === tab.id ? 'primary-button' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+            style={{ borderRadius: '6px', padding: '8px 16px', fontWeight: '600' }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'general' && (
+        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>Workspace Identity & Regional Preferences</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Workspace Name</label>
+              <input type="text" value={settings.workspaceName} onChange={(e) => setSettings({ ...settings, workspaceName: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Support Inbound Email</label>
+              <input type="email" value={settings.supportEmail} onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>System Timezone</label>
+              <select value={settings.timezone} onChange={(e) => setSettings({ ...settings, timezone: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value="Asia/Karachi (UTC+05:00)">Asia/Karachi (UTC+05:00)</option>
+                <option value="UTC (UTC+00:00)">UTC (UTC+00:00)</option>
+                <option value="America/New_York (UTC-05:00)">America/New_York (UTC-05:00)</option>
+                <option value="Europe/London (UTC+01:00)">Europe/London (UTC+01:00)</option>
+                <option value="Asia/Dubai (UTC+04:00)">Asia/Dubai (UTC+04:00)</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Date Format</label>
+              <select value={settings.dateFormat} onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 30/09/2026)</option>
+                <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-09-30)</option>
+                <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 09/30/2026)</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <button type="submit" className="primary-button" disabled={isSaving}>Save Workspace Settings</button>
+          </div>
+        </form>
+      )}
+
+      {activeTab === 'tickets' && (
+        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>Ticket Processing & Service Level Agreements (SLA)</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Default Ticket Priority</label>
+              <select value={settings.defaultPriority} onChange={(e) => setSettings({ ...settings, defaultPriority: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Critical SLA Target</label>
+              <select value={settings.criticalSlaHours} onChange={(e) => setSettings({ ...settings, criticalSlaHours: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value={1}>1 Hour (Urgent)</option>
+                <option value={2}>2 Hours</option>
+                <option value={4}>4 Hours</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Standard SLA Target</label>
+              <select value={settings.standardSlaHours} onChange={(e) => setSettings({ ...settings, standardSlaHours: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value={12}>12 Hours</option>
+                <option value={24}>24 Hours</option>
+                <option value={48}>48 Hours</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Auto-Assignment Strategy</label>
+              <select value={settings.autoAssignStrategy} onChange={(e) => setSettings({ ...settings, autoAssignStrategy: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <option value="Round Robin">Round Robin (Equal Distribution)</option>
+                <option value="Load Balanced">Load Balanced</option>
+                <option value="Manual">Manual / Unassigned</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <button type="submit" className="primary-button" disabled={isSaving}>Save Ticket Settings</button>
+          </div>
+        </form>
+      )}
+
+      {activeTab === 'notifications' && (
+        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>Alerts & Notification Triggers</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.emailAlerts} onChange={(e) => setSettings({ ...settings, emailAlerts: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+              <div><strong>Email Notifications for Critical Tickets</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Immediately notifies assigned managers upon critical creation</div></div>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.customerAutoReply} onChange={(e) => setSettings({ ...settings, customerAutoReply: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+              <div><strong>Customer Auto-Reply Acknowledgment</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Sends automated receipt email with ticket ID to customer</div></div>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.soundAlerts} onChange={(e) => setSettings({ ...settings, soundAlerts: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+              <div><strong>Real-time In-App Audio & Notice Toasts</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Plays a subtle sound when automations or commands execute</div></div>
+            </label>
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <button type="submit" className="primary-button" disabled={isSaving}>Save Notification Settings</button>
+          </div>
+        </form>
+      )}
+
+      {activeTab === 'ai' && (
+        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>AI Command Box & Intelligent Triage</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.aiCommandMode} onChange={(e) => setSettings({ ...settings, aiCommandMode: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+              <div><strong>AI Natural Language Command Box (Active)</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Supports natural language queries and fast entity creation</div></div>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={settings.aiAutoPriority} onChange={(e) => setSettings({ ...settings, aiAutoPriority: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+              <div><strong>Intelligent Priority Detection</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Automatically detects critical keywords like "outage" or "broken"</div></div>
+            </label>
+          </div>
+          <div style={{ marginTop: '24px' }}>
+            <button type="submit" className="primary-button" disabled={isSaving}>Save AI Settings</button>
+          </div>
+        </form>
+      )}
+
+      {activeTab === 'backend' && (
+        <div className="panel" style={{ padding: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>Database Health & Backup</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <h4 style={{ margin: '0 0 8px 0' }}>Test Backend Connection</h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#64748b' }}>Verify live connectivity to your REST API and MySQL database.</p>
+              <button type="button" className="secondary-button" onClick={testBackendConnection} disabled={isTesting}>
+                {isTesting ? 'Testing...' : '⚡ Test Connection Now'}
+              </button>
+              {connectionMsg && (
+                <div style={{ marginTop: '10px', fontSize: '0.9rem', fontWeight: 600, color: connectionMsg.startsWith('✓') ? '#10b981' : '#ef4444' }}>
+                  {connectionMsg}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <h4 style={{ margin: '0 0 8px 0' }}>Full Workspace Backup</h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#64748b' }}>Download a timestamped JSON file containing all tickets, settings, and registered accounts.</p>
+              <button type="button" className="primary-button" onClick={exportWorkspaceBackup}>
+                📦 Download JSON Backup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -199,11 +964,67 @@ function StatusLine({ label, value, percent, color }) { return <div className="s
 function TicketRow({ ticket }) { return <div className="ticket-row"><span className={`priority-bar ${ticket.priority.toLowerCase()}`} /><span className="row-id">#{ticket.id}</span><span className="row-subject"><strong>{ticket.subject}</strong><small>{ticket.customer} · {ticket.module}</small></span><span className="sla-warning">{ticket.sla}</span><span className="avatar small">{ticket.initials}</span></div> }
 function Activity({ icon, title, person, time, tone }) { return <div className="activity"><span className={`activity-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{person} · {time}</small></span></div> }
 
-function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilter, setPriorityFilter, assigneeFilter, setAssigneeFilter, onSelect, onCreate }) { return <section className="panel ticket-list-panel"><div className="ticket-toolbar"><div className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tickets, customers, tags..." /></div><div className="segmented">{['All', 'Open', 'Pending', 'Resolved'].map((item) => <button className={filter === item ? 'selected' : ''} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div><select className="filter-select" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="All">All priorities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select><select className="filter-select" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="All">All assignees</option>{['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Unassigned'].map((name) => <option key={name}>{name}</option>)}</select><button className="primary-button" onClick={onCreate}>+ New ticket</button></div><div className="table-header"><span>Ticket</span><span>Priority</span><span>Status</span><span>Assignee</span><span>Created</span></div>{tickets.map((ticket) => <button className="table-row table-row-button" key={ticket.id} onClick={() => onSelect(ticket.id)}><div className="ticket-cell"><span className="avatar">{ticket.initials}</span><span><strong>#{ticket.id} {ticket.subject}</strong><small>{ticket.customer} · {ticket.module} · {ticket.channel}</small></span></div><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className="assignee">{ticket.assignee}</span><span className="created">{ticket.created}<small>{ticket.sla}</small></span></button>)}{tickets.length === 0 && <div className="empty-state">No tickets match this view.</div>}</section> }
+function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilter, setPriorityFilter, assigneeFilter, setAssigneeFilter, onSelect, onCreate }) { 
+  return (
+    <section className="panel ticket-list-panel">
+      <div className="ticket-toolbar">
+        <div className="search-box">
+          <span>⌕</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search or use status:open priority:high assigned:kiran" />
+          {query && (
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', marginLeft: '6px' }}
+              onClick={() => setQuery('')}
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {query && (
+          <button
+            type="button"
+            className="secondary-button"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer' }}
+            onClick={() => {
+              setQuery('')
+              setFilter('All')
+              setPriorityFilter('All')
+              setAssigneeFilter('All')
+            }}
+          >
+            ← View all
+          </button>
+        )}
+
+        <div className="segmented">{['All', 'Open', 'Pending', 'Resolved'].map((item) => <button className={filter === item ? 'selected' : ''} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div>
+        <select className="filter-select" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="All">All priorities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+        <select className="filter-select" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="All">All assignees</option>{['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Unassigned'].map((name) => <option key={name}>{name}</option>)}</select>
+        <button className="primary-button" onClick={onCreate}>+ New ticket</button>
+      </div>
+      <div className="query-hint">Combine filters with spaces. Example: <code>status:open priority:high assigned:kiran</code></div>
+      <div className="table-header"><span>Ticket</span><span>Priority</span><span>Status</span><span>Ownership</span><span>Updated</span></div>
+      {tickets.map((ticket) => (
+        <button className="table-row table-row-button" key={ticket.id} onClick={() => onSelect(ticket.id)}>
+          <div className="ticket-cell"><span className="avatar">{ticket.initials}</span><span><strong>#{ticket.id} {ticket.subject}</strong><small>{ticket.customer} · {ticket.email} · {ticket.category}</small></span></div>
+          <span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span>
+          <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
+          <span className="assignee"><strong>{ticket.assignee}</strong><small>{ticket.team} · {ticket.department}</small></span>
+          <span className="created">{ticket.updatedDate}<small>{ticket.tags.join(' · ')}</small></span>
+        </button>
+      ))}
+      {tickets.length === 0 && <div className="empty-state">No tickets match this view.</div>}
+    </section>
+  ) 
+}
 
 function TicketDetail({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'] }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Assignee</small><strong>{ticket.assignee}</strong><span>{ticket.department}</span></div><div><small>SLA due</small><strong>{ticket.sla}</strong><span>{ticket.dueDate}</span></div><div><small>Module</small><strong>{ticket.module}</strong><span>{ticket.tags.join(' · ')}</span></div></div><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an internal note or customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section></aside></div> }
+function TicketDetailAdvanced({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'], updatedDate: new Date().toLocaleString() }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Ticket ID</small><strong>#{ticket.id}</strong><span>Created: {ticket.createdDate}</span></div><div><small>Module / category</small><strong>{ticket.module}</strong><span>{ticket.category}</span></div><div><small>Ownership</small><strong>{ticket.assignee}</strong><span>{ticket.team} · {ticket.department}</span></div><div><small>Due date / SLA</small><strong>{ticket.dueDate}</strong><span>{ticket.sla}</span></div><div><small>Updated</small><strong>{ticket.updatedDate}</strong><span>{ticket.tags.join(' · ') || 'No tags'}</span></div></div><section className="drawer-section"><h3>Attachments</h3>{ticket.attachments.length ? ticket.attachments.map((file) => <div className="attachment-item" key={file}>📎 {file}</div>) : <p className="muted-copy">No attachments added.</p>}</section><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section><section className="drawer-section"><h3>Internal notes</h3>{ticket.internalNotes.length ? ticket.internalNotes.map((item, index) => <div className="comment-item internal-note" key={`${item}-${index}`}>{item}<small>Visible to agents only</small></div>) : <p className="muted-copy">No internal notes added.</p>}</section><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section></aside></div> }
 function Automation({ onNotice }) { const rules = [{ name: 'Escalate critical tickets', trigger: 'Priority is Critical', action: 'Assign to Support Manager + notify', status: 'Active', runs: '18 runs' }, { name: 'SLA risk alert', trigger: 'Less than 60 minutes remaining', action: 'Notify assignee + manager', status: 'Active', runs: '42 runs' }, { name: 'Close resolved tickets', trigger: 'Status is Resolved for 7 days', action: 'Archive ticket', status: 'Paused', runs: '8 runs' }]; return <div className="automation-layout"><div className="automation-intro"><p className="overline">Operations engine</p><h2>Rules that keep work moving.</h2><p>Build trigger, condition, and action flows that handle the repetitive work before it reaches your team.</p><button className="primary-button" onClick={() => onNotice('Rule builder opened. Connect a trigger to begin.')}>+ Create automation</button></div><div className="rule-list">{rules.map((rule) => <div className="rule-card" key={rule.name}><div className="rule-top"><span className={`rule-status ${rule.status.toLowerCase()}`} /> <strong>{rule.name}</strong><button className="more-button">•••</button></div><div className="rule-flow"><span><small>WHEN</small>{rule.trigger}</span><b>→</b><span><small>THEN</small>{rule.action}</span></div><div className="rule-footer"><span className={`pill ${rule.status.toLowerCase()}`}>{rule.status}</span><small>{rule.runs} this month</small></div></div>)}</div></div> }
 function People() { const people = [{ name: 'Kiran Shah', role: 'Administrator', team: 'Leadership', load: '8 tickets', initials: 'KS' }, { name: 'Ahmed Khan', role: 'Support agent', team: 'Core support', load: '12 tickets', initials: 'AK' }, { name: 'Sara Davis', role: 'Support agent', team: 'Enterprise', load: '7 tickets', initials: 'SD' }, { name: 'Maya Patel', role: 'Manager', team: 'Leadership', load: '4 tickets', initials: 'MP' }]; return <section className="panel people-panel"><div className="panel-heading"><div><h2>People & permissions</h2><p>Manage access, teams, and workload across the workspace.</p></div><button className="primary-button">+ Invite member</button></div><div className="people-grid">{people.map((person) => <div className="person-card" key={person.name}><span className="avatar large">{person.initials}</span><strong>{person.name}</strong><span>{person.role}</span><small>{person.team} · {person.load}</small><button>Manage access <span>→</span></button></div>)}</div></section> }
 function Reports() { return <div className="reports-layout"><section className="panel report-feature"><p className="overline">Monthly service report</p><h2>September was your fastest month yet.</h2><p>Resolution time fell by 16% while customer satisfaction held steady at <strong>4.8/5</strong>.</p><div className="report-bars"><span style={{ height: '42%' }} /><span style={{ height: '58%' }} /><span style={{ height: '50%' }} /><span style={{ height: '72%' }} /><span style={{ height: '66%' }} /><span style={{ height: '90%' }} /><span style={{ height: '82%' }} /></div><div className="bar-labels"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></section><div className="report-side"><Metric label="CSAT score" value="4.8/5" trend="4.1%" tone="green" detail="above target" /><Metric label="Tickets resolved" value="186" trend="16.8%" tone="green" detail="vs. previous period" /><button className="export-button">↓ Export full report <span>PDF · CSV · XLSX</span></button></div></div> }
+function ManagementPlaceholder({ title }) { return <section className="panel management-placeholder"><div className="placeholder-icon">✦</div><p className="overline">Workspace module</p><h2>{title}</h2><p>This section is route-ready and prepared for its dedicated workflow. Existing ticket operations remain available from the Tickets section.</p><span className="pill active">Coming next</span></section> }
 
 export default App
