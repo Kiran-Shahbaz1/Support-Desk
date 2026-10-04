@@ -1,5 +1,5 @@
 // Aakhir se '/' hata dein
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || 'http://localhost:4000/api/v1'
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:4000/api/v1' : '/api/v1')
 async function request(endpoint, options = {}) {
   // Agar endpoint ke shuru mein '/' nahi hai, toh khud add kar dega
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
