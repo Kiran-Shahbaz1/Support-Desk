@@ -11,8 +11,8 @@ In fast-growing organizations, customer support requests often get scattered acr
 **DigitalSofts Support Desk** solves this by providing a unified, real-time command center where teams can triage, assign, track, automate, and resolve tickets efficiently—backed by automated SLA tracking, executive reports, and an AI-driven command assistant.
 ---
 ## 🌐 Quick Links & Demo
-- **Live Demo:** [https://digitalsofts-support-desk.vercel.app](https://digitalsofts-support-desk.vercel.app)
-- **Repository:** [https://github.com/YOUR_USERNAME/ticket-management-system](https://github.com/YOUR_USERNAME/ticket-management-system)
+- **Live Demo:** [https://ticket-management-system-ri48dzxir-wk5629.vercel.app](https://ticket-management-system-ri48dzxir-wk5629.vercel.app)
+- **Repository:** [https://github.com/wk5629/Ticket-Management-System](https://github.com/wk5629/Ticket-Management-System)
 ---
 ## ✨ Features
 - **📊 Real-Time Executive Dashboard**: High-level KPIs, open/pending/resolved counters, SLA breach alerts, and dynamic activity audit trail.
@@ -53,7 +53,7 @@ In fast-growing organizations, customer support requests often get scattered acr
 - Git
 ### 2. Clone & Install
 ```bash
-git clone https://github.com/YOUR_USERNAME/ticket-management-system.git
+git clone https://github.com/wk5629/Ticket-Management-System
 cd ticket-management-system
 npm install
 ```
@@ -171,5 +171,39 @@ View Report Locally: npx playwright show-report
 
 ![Playwright HTML Report](./docs/screenshots/playwright-report.png.png)
 
+## 🏗️ System Architecture & Repository Layout
 
+This application follows a **modern dual-layer architecture**:
+1. **Frontend Layer (Vite + React):** Owns UI presentation, optimistic state, and instant LocalStorage resilience.
+2. **Backend API Layer (Express + Prisma):** Owns data validation, business logic, REST endpoints (`/api/v1`), and database operations.
+
+```text
+Ticket-Management-System/
+├── src/                               # Frontend Presentation Layer (React + Vite)
+│   ├── components/                    # Reusable SaaS UI components (Dashboard, Forms, Modals)
+│   ├── App.jsx                        # Main Application shell, view routing & command center
+│   ├── api.js                         # REST API Client with fallback adapter
+│   ├── automationEngine.js            # Deterministic automation rules & SLA evaluator
+│   ├── workspaceCommand.js            # Natural language command parser & intents
+│   ├── workspaceCommandActions.js     # Dispatcher for command actions & state mutations
+│   ├── workspaceData.js               # Seed fixture data (15+ ERP support tickets)
+│   ├── useLocalStorageState.js        # Centralized resilient LocalStorage manager
+│   └── main.jsx                       # React DOM entry point
+├── server/                            # Backend API Layer (Node.js + Express)
+│   ├── src/
+│   │   ├── app.js                     # Express app setup, security headers & CORS
+│   │   ├── controllers/               # Route handlers (Ticket, Customer, Agent, Reports)
+│   │   ├── routes/                    # Versioned REST route composition (/api/v1)
+│   │   ├── services/                  # Business logic services & data transformations
+│   │   ├── models/                    # Data models & SQLite/MySQL Prisma mapping
+│   │   └── middleware/                # Rate limiting, requestId tracing & error handling
+│   └── tests/                         # API Integration test suite (Supertest)
+├── tests/                             # Comprehensive QA Verification
+│   ├── unit/                          # Unit tests for automation engine & command actions
+│   └── e2e/                           # Playwright E2E User Journey test suite
+├── playwright-report/                 # Generated interactive Playwright HTML report
+├── screenshots/                       # Visual evidence & report snapshots
+├── TEST_EVIDENCE.md                   # Full QA verification report
+├── vercel.json                        # Multi-service cloud deployment configuration
+└── package.json                       # Dependencies & npm scripts
   
