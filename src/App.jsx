@@ -116,9 +116,25 @@ function App() {
   // -------------------------------------------------------------
   // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Strictly reactive to add/delete)
   // -------------------------------------------------------------
+    // -------------------------------------------------------------
+  // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Strictly reactive)
+  // -------------------------------------------------------------
   const availableCustomers = useMemo(() => {
-    return (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
-  }, [customers])
+    // 1. Agar customers state mein mojood hain to wahan se lein
+    const fromCustomersState = (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
+    
+    // 2. Agar state khali hai, to tickets ke andar se customers nikaal lein
+    const fromTickets = (tickets || []).map((t) => t.customer).filter(Boolean)
+    
+    // 3. Fallback seed customers taake dropdown kabhi empty na ho
+    const seed = ['Maya Chen', 'Theo Martin', 'Priya Nair', 'Jon Bell', 'Owen Wilson']
+
+    // Agar customers list mein data hai to sirf live customers use karein, warna tickets + seed
+    if (fromCustomersState.length > 0) {
+      return [...new Set(fromCustomersState)]
+    }
+    return [...new Set([...fromTickets, ...seed])]
+  }, [customers, tickets])
 
   const availableAgents = useMemo(() => {
     return (agents || []).map((a) => (typeof a === 'string' ? a : a?.name)).filter(Boolean)
