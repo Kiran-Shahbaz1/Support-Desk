@@ -494,7 +494,9 @@ function App() {
         <section className="content-wrap">
           <div className="heading-row">
             <div>
-              <p className="overline">Wednesday, September 30, 2026</p>
+              <p className="overline">
+  {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+</p>
               <h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1>
               <p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p>
             </div>
