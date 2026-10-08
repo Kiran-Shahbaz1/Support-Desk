@@ -12,9 +12,18 @@ function readStorage(key, fallback = []) {
 }
 
 // -------------------------------------------------------------
-// 1. AUTOMATION PAGE COMPONENT
+// 1. AUTOMATION PAGE COMPONENT (WITH FULL EDIT & CREATE MODAL)
 // -------------------------------------------------------------
 export function AutomationPage({ rules = [], setRules, onActivity, onRunRules }) {
+  const [editingRule, setEditingRule] = useState(null)
+  const [isCreating, setIsCreating] = useState(false)
+  const [form, setForm] = useState({
+    name: '',
+    trigger: '',
+    action: '',
+  })
+
+  // Toggle active / paused
   const toggleRule = (ruleId) => {
     const next = rules.map((r) => {
       if (r.id === ruleId) {
@@ -27,6 +36,76 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
     if (setRules) setRules(next)
   }
 
+  // Open Edit Modal
+  const openEdit = (rule) => {
+    setEditingRule(rule)
+    setForm({
+      name: rule.name || '',
+      trigger: rule.trigger || rule.triggerType || '',
+      action: rule.action || rule.actionType || '',
+    })
+  }
+
+  // Save Edit
+  const saveEdit = (e) => {
+    e.preventDefault()
+    if (!form.name.trim() || !form.trigger.trim() || !form.action.trim()) {
+      alert('Please fill all fields.')
+      return
+    }
+
+    const next = rules.map((r) => {
+      if (r.id === editingRule.id || r.name === editingRule.name) {
+        return {
+          ...r,
+          name: form.name.trim(),
+          trigger: form.trigger.trim(),
+          triggerType: form.trigger.trim(),
+          action: form.action.trim(),
+          actionType: form.action.trim(),
+        }
+      }
+      return r
+    })
+
+    if (setRules) setRules(next)
+    if (onActivity) onActivity(`Updated automation rule: "${form.name}"`)
+    setEditingRule(null)
+  }
+
+  // Save New Rule
+  const saveNewRule = (e) => {
+    e.preventDefault()
+    if (!form.name.trim() || !form.trigger.trim() || !form.action.trim()) {
+      alert('Please fill all fields.')
+      return
+    }
+
+    const newRule = {
+      id: `rule-${Date.now()}`,
+      name: form.name.trim(),
+      trigger: form.trigger.trim(),
+      triggerType: form.trigger.trim(),
+      action: form.action.trim(),
+      actionType: form.action.trim(),
+      status: 'Active',
+      runs: '0 runs',
+    }
+
+    if (setRules) setRules([newRule, ...rules])
+    if (onActivity) onActivity(`Created automation rule: "${form.name}"`)
+    setIsCreating(false)
+    setForm({ name: '', trigger: '', action: '' })
+  }
+
+  // Delete Rule
+  const deleteRule = (ruleId) => {
+    if (!window.confirm('Are you sure you want to delete this rule?')) return
+    const next = rules.filter((r) => r.id !== ruleId)
+    if (setRules) setRules(next)
+    if (onActivity) onActivity(`Deleted automation rule`)
+  }
+
   return (
     <div className="automation-layout">
       <div className="automation-intro">
@@ -34,7 +113,13 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
         <h2>Rules that keep work moving forward.</h2>
         <p>Trigger-action workflows automatically triage incoming tickets, escalate SLAs, and notify managers.</p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-          <button className="primary-button" onClick={() => alert('Rule Builder: Select triggers and actions from the management panel.')}>
+          <button
+            className="primary-button"
+            onClick={() => {
+              setForm({ name: '', trigger: '', action: '' })
+              setIsCreating(true)
+            }}
+          >
             + Create Automation Rule
           </button>
           {onRunRules && (
@@ -53,14 +138,34 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
               <div className="rule-top">
                 <span className={`rule-status ${isActive ? 'active' : 'paused'}`} />
                 <strong>{rule.name}</strong>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
-                  onClick={() => toggleRule(rule.id)}
-                >
-                  {isActive ? 'Pause' : 'Activate'}
-                </button>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                    onClick={() => toggleRule(rule.id)}
+                  >
+                    {isActive ? 'Pause' : 'Activate'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ padding: '2px 8px', fontSize: '0.75rem', color: '#0284c7' }}
+                    onClick={() => openEdit(rule)}
+                    title="Edit rule"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ padding: '2px 8px', fontSize: '0.75rem', color: '#dc2626' }}
+                    onClick={() => deleteRule(rule.id)}
+                    title="Delete rule"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               <div className="rule-flow">
                 <span>
@@ -81,6 +186,133 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
           )
         })}
       </div>
+
+      {/* EDIT MODAL */}
+      {editingRule && (
+        <div className="modal-backdrop" onClick={() => setEditingRule(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: '24px' }}>
+            <div className="modal-header" style={{ marginBottom: '16px' }}>
+              <div>
+                <p className="overline" style={{ margin: 0 }}>Rule Builder</p>
+                <h3 style={{ margin: '4px 0 0 0' }}>Edit Automation Rule</h3>
+              </div>
+              <button className="close-button" onClick={() => setEditingRule(null)}>×</button>
+            </div>
+            <form onSubmit={saveEdit}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Rule Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  WHEN (Trigger) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.trigger}
+                  onChange={(e) => setForm({ ...form, trigger: e.target.value })}
+                  placeholder="e.g. Priority is Critical"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  THEN (Action) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.action}
+                  onChange={(e) => setForm({ ...form, action: e.target.value })}
+                  placeholder="e.g. Assign to Kiran Shah"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" className="secondary-button" onClick={() => setEditingRule(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE MODAL */}
+      {isCreating && (
+        <div className="modal-backdrop" onClick={() => setIsCreating(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', padding: '24px' }}>
+            <div className="modal-header" style={{ marginBottom: '16px' }}>
+              <div>
+                <p className="overline" style={{ margin: 0 }}>Rule Builder</p>
+                <h3 style={{ margin: '4px 0 0 0' }}>Create New Automation Rule</h3>
+              </div>
+              <button className="close-button" onClick={() => setIsCreating(false)}>×</button>
+            </div>
+            <form onSubmit={saveNewRule}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  Rule Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Escalate VIP tickets"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  WHEN (Trigger) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Customer tier is Enterprise"
+                  value={form.trigger}
+                  onChange={(e) => setForm({ ...form, trigger: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+                  THEN (Action) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Notify Manager immediately"
+                  value={form.action}
+                  onChange={(e) => setForm({ ...form, action: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button type="button" className="secondary-button" onClick={() => setIsCreating(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button">
+                  Create Rule <span>→</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
