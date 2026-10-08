@@ -485,14 +485,48 @@ function App() {
           </div>
 
           <div className="top-actions">
-            <button className="icon-button" onClick={() => setNotice('You are all caught up.')}>♧<span className="notification-dot" /></button>
-            <button className="help-button">?</button>
+            <button className="icon-button" onClick={() => setNotice('You are all caught up.')} title="Notifications">♧<span className="notification-dot" /></button>
+            <button className="help-button" onClick={() => navigate('/knowledge-base')} title="Knowledge Base & Help Center">?</button>
             <button className="new-button" onClick={() => navigate('/tickets/new')}><span>+</span> New ticket</button>
           </div>
         </header>
 
         <section className="content-wrap">
-          <div className="heading-row"><div><p className="overline">Wednesday, September 30, 2026</p><h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1><p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p></div><div className="date-pill">Last 30 days <span>⌄</span></div></div>
+          <div className="heading-row">
+            <div>
+              <p className="overline">Wednesday, September 30, 2026</p>
+              <h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1>
+              <p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p>
+            </div>
+            
+            {/* Live Interactive Date Range Selector */}
+            <select
+              className="date-pill"
+              defaultValue="Last 30 days"
+              style={{
+                cursor: 'pointer',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '20px',
+                padding: '6px 14px',
+                fontWeight: '600',
+                color: '#334155',
+                outline: 'none',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+              }}
+              onChange={(e) => {
+                setNotice(`Showing workspace records for: ${e.target.value}`)
+                setNoticeTone('success')
+              }}
+            >
+              <option value="Last 30 days">Last 30 days ⌄</option>
+              <option value="Today">Today</option>
+              <option value="Last 7 days">Last 7 days</option>
+              <option value="This Quarter">This Quarter</option>
+              <option value="All time">All time</option>
+            </select>
+          </div>
+
           {notice && <div className={`notice notice-${noticeTone}`}><span>{noticeTone === 'success' ? '✓' : '!'}</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
           {activeView === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => navigate('/tickets')} />}
           {activeView === 'Tickets' && <label className="archived-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived ({tickets.filter((ticket) => ticket.archived).length})</label>}
