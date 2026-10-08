@@ -21,6 +21,14 @@ const initialTickets = [
   { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', team: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'], archived: true },
 ]
 
+const initialCustomersSeed = [
+  { id: 1, name: 'Maya Chen', email: 'maya.chen@acme.co', company: 'Acme Corp', tier: 'Enterprise' },
+  { id: 2, name: 'Theo Martin', email: 'theo.martin@northwind.io', company: 'Northwind', tier: 'Pro' },
+  { id: 3, name: 'Priya Nair', email: 'priya.nair@contoso.com', company: 'Contoso', tier: 'Enterprise' },
+  { id: 4, name: 'Jon Bell', email: 'jon.bell@globex.com', company: 'Globex', tier: 'Pro' },
+  { id: 5, name: 'Owen Wilson', email: 'owen.wilson@example.com', company: 'Example Inc', tier: 'Standard' },
+]
+
 const normalizeCommunication = (entry, visibility, index) => typeof entry === 'string' ? { id: `${visibility}-${index}-${entry}`, body: entry, author: 'Workspace administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), edited: false, mentions: [...new Set(entry.match(/@[a-z0-9_.-]+/gi) || [])], visibility } : { visibility, edited: false, mentions: [], ...entry }
 
 const enrichTicket = (ticket) => {
@@ -99,13 +107,7 @@ function App() {
 
   // Live Shared State across all pages
   const [tickets, setTickets] = useLocalStorageState('relay:tickets', initialTickets.map(enrichTicket))
-  const [customers, setCustomers] = useLocalStorageState('relay:customers', [
-    { id: 1, name: 'Maya Chen', email: 'maya.chen@acme.co' },
-    { id: 2, name: 'Theo Martin', email: 'theo.martin@northwind.io' },
-    { id: 3, name: 'Priya Nair', email: 'priya.nair@contoso.com' },
-    { id: 4, name: 'Jon Bell', email: 'jon.bell@globex.com' },
-    { id: 5, name: 'Owen Wilson', email: 'owen.wilson@example.com' },
-  ])
+  const [customers, setCustomers] = useLocalStorageState('relay:customers', initialCustomersSeed)
   const [agents, setAgents] = useLocalStorageState('relay:agents', initialAgents || [])
   const [teams, setTeams] = useLocalStorageState('relay:teams', initialTeams || [])
   const [departments, setDepartments] = useLocalStorageState('relay:departments', initialDepartments || [])
@@ -114,38 +116,34 @@ function App() {
   const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 0)
 
   // -------------------------------------------------------------
-  // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Strictly reactive to add/delete)
-  // -------------------------------------------------------------
-    // -------------------------------------------------------------
-  // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Strictly reactive)
+  // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Never Empty, Strictly Live)
   // -------------------------------------------------------------
   const availableCustomers = useMemo(() => {
-    // 1. Agar customers state mein mojood hain to wahan se lein
-    const fromCustomersState = (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
+    const fromState = (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
+    if (fromState.length > 0) return [...new Set(fromState)]
     
-    // 2. Agar state khali hai, to tickets ke andar se customers nikaal lein
+    // Fallback taake kabhi empty na ho
     const fromTickets = (tickets || []).map((t) => t.customer).filter(Boolean)
-    
-    // 3. Fallback seed customers taake dropdown kabhi empty na ho
     const seed = ['Maya Chen', 'Theo Martin', 'Priya Nair', 'Jon Bell', 'Owen Wilson']
-
-    // Agar customers list mein data hai to sirf live customers use karein, warna tickets + seed
-    if (fromCustomersState.length > 0) {
-      return [...new Set(fromCustomersState)]
-    }
     return [...new Set([...fromTickets, ...seed])]
   }, [customers, tickets])
 
   const availableAgents = useMemo(() => {
-    return (agents || []).map((a) => (typeof a === 'string' ? a : a?.name)).filter(Boolean)
+    const fromState = (agents || []).map((a) => (typeof a === 'string' ? a : a?.name)).filter(Boolean)
+    if (fromState.length > 0) return [...new Set(fromState)]
+    return ['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Maya Patel']
   }, [agents])
 
   const availableDepartments = useMemo(() => {
-    return (departments || []).map((d) => (typeof d === 'string' ? d : d?.name)).filter(Boolean)
+    const fromState = (departments || []).map((d) => (typeof d === 'string' ? d : d?.name)).filter(Boolean)
+    if (fromState.length > 0) return [...new Set(fromState)]
+    return ['Core support', 'Finance support', 'Data support', 'Enterprise', 'Billing', 'Operations']
   }, [departments])
 
   const availableTeams = useMemo(() => {
-    return (teams || []).map((t) => (typeof t === 'string' ? t : t?.name)).filter(Boolean)
+    const fromState = (teams || []).map((t) => (typeof t === 'string' ? t : t?.name)).filter(Boolean)
+    if (fromState.length > 0) return [...new Set(fromState)]
+    return ['Core support', 'Finance support', 'Data support', 'Leadership', 'Enterprise']
   }, [teams])
 
   const automationRules = useMemo(() => storedAutomationRules.map((rule) => {
@@ -165,15 +163,15 @@ function App() {
   const [formError, setFormError] = useState('')
   const [ticketForm, setTicketForm] = useState({ 
     subject: '', 
-    customer: '', 
-    email: '', 
+    customer: 'Maya Chen', 
+    email: 'maya.chen@acme.co', 
     description: '', 
     module: 'General', 
     category: 'General inquiry', 
     priority: 'High', 
     assignee: 'Unassigned', 
-    department: '', 
-    team: '', 
+    department: 'Core support', 
+    team: 'Core support', 
     tags: '', 
     dueDate: '', 
     sla: 'Standard', 
@@ -243,10 +241,10 @@ function App() {
         }
         if (actRes && Array.isArray(actRes) && actRes.length > 0) setActivityLog(actRes)
         if (rulesRes && Array.isArray(rulesRes) && rulesRes.length > 0) setAutomationRules(rulesRes.map(normalizeAutomationRule))
-        if (custRes && Array.isArray(custRes)) setCustomers(custRes)
-        if (agentRes && Array.isArray(agentRes)) setAgents(agentRes)
-        if (teamRes && Array.isArray(teamRes)) setTeams(teamRes)
-        if (deptRes && Array.isArray(deptRes)) setDepartments(deptRes)
+        if (custRes && Array.isArray(custRes) && custRes.length > 0) setCustomers(custRes)
+        if (agentRes && Array.isArray(agentRes) && agentRes.length > 0) setAgents(agentRes)
+        if (teamRes && Array.isArray(teamRes) && teamRes.length > 0) setTeams(teamRes)
+        if (deptRes && Array.isArray(deptRes) && deptRes.length > 0) setDepartments(deptRes)
         if (userRes?.name) setCurrentUser(userRes)
       } catch (err) {
         console.warn('[Database Sync]', err.message)
@@ -486,7 +484,7 @@ function App() {
     recordActivity(`Created ticket #${nextId} from intake form`)
     setShowCreate(false)
     setFormError('')
-    setTicketForm({ subject: '', customer: '', email: '', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: '', team: '', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
+    setTicketForm({ subject: '', customer: availableCustomers[0] || 'Maya Chen', email: 'maya.chen@acme.co', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
     goToView('Tickets')
     setNotice(`Ticket created and synchronized with database.`)
     window.dispatchEvent(new Event('relay:data-updated'))
@@ -718,7 +716,7 @@ function App() {
                 />
               </label>
 
-              {/* 1. CUSTOMER DROPDOWN (100% LIVE) */}
+              {/* 1. CUSTOMER DROPDOWN (100% LIVE & GUARANTEED FILLED) */}
               <label>
                 Customer *
                 <select
@@ -1417,6 +1415,7 @@ function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilte
 }
 
 function TicketDetail({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'] }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Assignee</small><strong>{ticket.assignee}</strong><span>{ticket.department}</span></div><div><small>SLA due</small><strong>{ticket.sla}</strong><span>{ticket.dueDate}</span></div><div><small>Module</small><strong>{ticket.module}</strong><span>{ticket.tags.join(' · ')}</span></div></div><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an internal note or customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section></aside></div> }
+function TicketDetailAdvanced({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'], updatedDate: new Date().toLocaleString() }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Ticket ID</small><strong>#{ticket.id}</strong><span>Created: {ticket.createdDate}</span></div><div><small>Module / category</small><strong>{ticket.module}</strong><span>{ticket.category}</span></div><div><small>Ownership</small><strong>{ticket.assignee}</strong><span>{ticket.team} · {ticket.department}</span></div><div><small>Due date / SLA</small><strong>{ticket.dueDate}</strong><span>{ticket.sla}</span></div><div><small>Updated</small><strong>{ticket.updatedDate}</strong><span>{ticket.tags.join(' · ') || 'No tags'}</span></div></div><section className="drawer-section"><h3>Attachments</h3>{ticket.attachments.length ? ticket.attachments.map((file) => <div className="attachment-item" key={file}>📎 {file}</div>) : <p className="muted-copy">No attachments added.</p>}</section><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section><section className="drawer-section"><h3>Internal notes</h3>{ticket.internalNotes.length ? ticket.internalNotes.map((item, index) => <div className="comment-item internal-note" key={`${item}-${index}`}>{item}<small>Visible to agents only</small></div>) : <p className="muted-copy">No internal notes added.</p>}</section><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section></aside></div> }
 function Automation({ onNotice }) { const rules = [{ name: 'Escalate critical tickets', trigger: 'Priority is Critical', action: 'Assign to Support Manager + notify', status: 'Active', runs: '18 runs' }, { name: 'SLA risk alert', trigger: 'Less than 60 minutes remaining', action: 'Notify assignee + manager', status: 'Active', runs: '42 runs' }, { name: 'Close resolved tickets', trigger: 'Status is Resolved for 7 days', action: 'Archive ticket', status: 'Paused', runs: '8 runs' }]; return <div className="automation-layout"><div className="automation-intro"><p className="overline">Operations engine</p><h2>Rules that keep work moving.</h2><p>Build trigger, condition, and action flows that handle the repetitive work before it reaches your team.</p><button className="primary-button" onClick={() => onNotice('Rule builder opened. Connect a trigger to begin.')}>+ Create automation</button></div><div className="rule-list">{rules.map((rule) => <div className="rule-card" key={rule.name}><div className="rule-top"><span className={`rule-status ${rule.status.toLowerCase()}`} /> <strong>{rule.name}</strong><button className="more-button">•••</button></div><div className="rule-flow"><span><small>WHEN</small>{rule.trigger}</span><b>→</b><span><small>THEN</small>{rule.action}</span></div><div className="rule-footer"><span className={`pill ${rule.status.toLowerCase()}`}>{rule.status}</span><small>{rule.runs} this month</small></div></div>)}</div></div> }
 function People() { const people = [{ name: 'Kiran Shah', role: 'Administrator', team: 'Leadership', load: '8 tickets', initials: 'KS' }, { name: 'Ahmed Khan', role: 'Support agent', team: 'Core support', load: '12 tickets', initials: 'AK' }, { name: 'Sara Davis', role: 'Support agent', team: 'Enterprise', load: '7 tickets', initials: 'SD' }, { name: 'Maya Patel', role: 'Manager', team: 'Leadership', load: '4 tickets', initials: 'MP' }]; return <section className="panel people-panel"><div className="panel-heading"><div><h2>People & permissions</h2><p>Manage access, teams, and workload across the workspace.</p></div><button className="primary-button">+ Invite member</button></div><div className="people-grid">{people.map((person) => <div className="person-card" key={person.name}><span className="avatar large">{person.initials}</span><strong>{person.name}</strong><span>{person.role}</span><small>{person.team} · {person.load}</small><button>Manage access <span>→</span></button></div>)}</div></section> }
 function Reports() { return <div className="reports-layout"><section className="panel report-feature"><p className="overline">Monthly service report</p><h2>September was your fastest month yet.</h2><p>Resolution time fell by 16% while customer satisfaction held steady at <strong>4.8/5</strong>.</p><div className="report-bars"><span style={{ height: '42%' }} /><span style={{ height: '58%' }} /><span style={{ height: '50%' }} /><span style={{ height: '72%' }} /><span style={{ height: '66%' }} /><span style={{ height: '90%' }} /><span style={{ height: '82%' }} /></div><div className="bar-labels"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></section><div className="report-side"><Metric label="CSAT score" value="4.8/5" trend="4.1%" tone="green" detail="above target" /><Metric label="Tickets resolved" value="186" trend="16.8%" tone="green" detail="vs. previous period" /><button className="export-button">↓ Export full report <span>PDF · CSV · XLSX</span></button></div></div> }
