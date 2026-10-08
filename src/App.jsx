@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-
 import { useLocation, useNavigate } from 'react-router-dom'
 import Dashboard from './Dashboard'
 import ManagementPages from './ManagementPages'
@@ -18,962 +17,828 @@ const initialTickets = [
   { id: 1041, subject: 'Cannot invite a new workspace member', customer: 'Theo Martin', initials: 'TM', email: 'theo.martin@northwind.io', description: 'The invite button spins indefinitely for a new workspace member.', module: 'Workspace', department: 'Core support', team: 'Core support', channel: 'Chat', priority: 'High', status: 'Pending', assignee: 'Ahmed Khan', sla: '02:18 left', created: '38 min ago', dueDate: 'Today, 11:00 PM', tag: 'Waiting on customer', tags: ['Invite', 'Workspace'], comments: ['Requested a screen recording from the customer.'], history: ['Ticket created via chat', 'Assigned to Ahmed Khan'], archived: false },
   { id: 1040, subject: 'SSO setup questions for the finance team', customer: 'Priya Nair', initials: 'PN', email: 'priya.nair@contoso.com', description: 'Customer needs guidance for configuring SAML metadata and role mapping.', module: 'Security', department: 'Enterprise', team: 'Enterprise', channel: 'Email', priority: 'Medium', status: 'Open', assignee: 'Sara Davis', sla: '05:40 left', created: '1 hr ago', dueDate: 'Tomorrow, 10:00 AM', tag: 'Enterprise', tags: ['SSO', 'Enterprise'], comments: [], history: ['Ticket created via email'], archived: false },
   { id: 1039, subject: 'Dashboard data is delayed by one hour', customer: 'Jon Bell', initials: 'JB', email: 'jon.bell@globex.com', description: 'Analytics dashboard is showing data from the previous hour.', module: 'Analytics', department: 'Data support', team: 'Data support', channel: 'API', priority: 'High', status: 'Open', assignee: 'Kiran Shah', sla: '03:11 left', created: '2 hrs ago', dueDate: 'Today, 10:15 PM', tag: 'Data', tags: ['Analytics', 'Incident'], comments: [], history: ['Ticket created via API', 'Tagged as Incident'], archived: false },
-  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', team: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'], archived: true },
+  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked how to switch daily summaries to weekly digests.', module: 'Settings', department: 'Core support', team: 'Core support', channel: 'Portal', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: '3 hrs ago', dueDate: 'Yesterday', tag: 'Resolved', tags: ['How-to', 'Settings'], comments: [], history: ['Ticket marked resolved'], archived: false },
+  { id: 1037, subject: 'Webhook signature verification fails intermittently', customer: 'Elena Rostova', initials: 'ER', email: 'elena.rostova@vertex.dev', description: 'Payload signatures fail verification during high-traffic spikes.', module: 'Integrations', department: 'Developer support', team: 'Developer support', channel: 'API', priority: 'Critical', status: 'Open', assignee: 'Sara Davis', sla: '00:15 left', created: '4 hrs ago', dueDate: 'Today, 8:00 PM', tag: 'SLA risk', tags: ['Webhooks', 'API'], comments: [], history: ['Escalated to engineering'], archived: false },
+  { id: 1036, subject: 'Upgrade workspace to Enterprise tier', customer: 'Marcus Vance', initials: 'MV', email: 'marcus.vance@apex.corp', description: 'Requesting custom terms and invoice payment flow for Enterprise tier.', module: 'Billing', department: 'Enterprise', team: 'Enterprise', channel: 'Email', priority: 'High', status: 'Pending', assignee: 'Kiran Shah', sla: '01:05 left', created: '5 hrs ago', dueDate: 'Today, 11:30 PM', tag: 'Sales handoff', tags: ['Sales', 'Upgrade'], comments: [], history: ['Sales team notified'], archived: false },
 ]
 
-const normalizeCommunication = (entry, visibility, index) => typeof entry === 'string' ? { id: `${visibility}-${index}-${entry}`, body: entry, author: 'Workspace administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), edited: false, mentions: [...new Set(entry.match(/@[a-z0-9_.-]+/gi) || [])], visibility } : { visibility, edited: false, mentions: [], ...entry }
-
-const enrichTicket = (ticket) => {
-  const enriched = { email: 'customer@example.com', description: 'No description provided.', module: 'General', category: 'General inquiry', department: 'Core support', team: 'Core support', channel: 'Web form', dueDate: 'Not scheduled', createdDate: ticket.created || 'Not recorded', updatedDate: ticket.created || 'Not recorded', sla: 'Not assigned', tags: ticket.tag ? [ticket.tag] : [], attachments: [], comments: [], internalNotes: [], history: [], archived: Boolean(ticket.archived), ...ticket }
-  return { ...enriched, comments: (enriched.comments || []).map((entry, index) => normalizeCommunication(entry, 'public', index)), internalNotes: (enriched.internalNotes || []).map((entry, index) => normalizeCommunication(entry, 'internal', index)) }
-}
-
-const navigationGroups = [
-  { label: 'Workspace', items: [
-    { label: 'Dashboard', view: 'Overview', path: '/', icon: '◒' },
-    { label: 'Tickets', view: 'Tickets', path: '/tickets', icon: '□' },
-    { label: 'Create Ticket', view: 'Create Ticket', path: '/tickets/new', icon: '+' },
-    { label: 'Customers', view: 'Customers', path: '/customers', icon: '♙' },
-    { label: 'Agents', view: 'Agents', path: '/agents', icon: '◎' },
-    { label: 'Teams', view: 'Teams', path: '/teams', icon: '♧' },
-    { label: 'Departments', view: 'Departments', path: '/departments', icon: '▦' },
-  ] },
-  { label: 'Operations', items: [
-    { label: 'Knowledge Base', view: 'Knowledge Base', path: '/knowledge-base', icon: '?' },
-    { label: 'Automation', view: 'Automation', path: '/automation', icon: '⌁' },
-    { label: 'Notifications', view: 'Notifications', path: '/notifications', icon: '♧' },
-    { label: 'Reports', view: 'Reports', path: '/reports', icon: '▥' },
-  ] },
-  { label: 'Administration', items: [
-    { label: 'AI Assistant', view: 'AI Assistant', path: '/ai-assistant', icon: '✦' },
-    { label: 'Settings', view: 'Settings', path: '/settings', icon: '⚙' },
-    { label: 'Admin', view: 'Admin', path: '/admin', icon: '◆' },
-  ] },
+const initialCustomersSeed = [
+  { id: 1, name: 'Maya Chen', email: 'maya.chen@acme.co', company: 'Acme Corp', tier: 'Enterprise', openTickets: 1 },
+  { id: 2, name: 'Theo Martin', email: 'theo.martin@northwind.io', company: 'Northwind', tier: 'Pro', openTickets: 1 },
+  { id: 3, name: 'Priya Nair', email: 'priya.nair@contoso.com', company: 'Contoso', tier: 'Enterprise', openTickets: 1 },
+  { id: 4, name: 'Jon Bell', email: 'jon.bell@globex.com', company: 'Globex', tier: 'Pro', openTickets: 1 },
+  { id: 5, name: 'Owen Wilson', email: 'owen.wilson@example.com', company: 'Example Inc', tier: 'Standard', openTickets: 0 },
+  { id: 6, name: 'Elena Rostova', email: 'elena.rostova@vertex.dev', company: 'Vertex Dev', tier: 'Enterprise', openTickets: 1 },
+  { id: 7, name: 'Marcus Vance', email: 'marcus.vance@apex.corp', company: 'Apex Corp', tier: 'Enterprise', openTickets: 1 },
 ]
-const navigationItems = navigationGroups.flatMap((group) => group.items)
 
-function downloadTicketReport(tickets) {
-  const rows = [['Ticket ID', 'Subject', 'Customer', 'Status', 'Priority', 'Assignee', 'Department', 'Archived'], ...tickets.map((ticket) => [ticket.id, ticket.subject, ticket.customer, ticket.status, ticket.priority, ticket.assignee, ticket.department, ticket.archived ? 'Yes' : 'No'])]
-  const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'ticket-report.csv'
-  link.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+const routeViewMap = {
+  '/': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/tickets': 'tickets',
+  '/customers': 'customers',
+  '/agents': 'agents',
+  '/teams': 'teams',
+  '/departments': 'departments',
+  '/automation': 'automation',
+  '/reports': 'reports',
 }
 
-const queryFields = new Set(['status', 'priority', 'assigned', 'assignee', 'department', 'team', 'tag', 'customer', 'module', 'category', 'id'])
-
-function parseTicketQuery(input) {
-  const conditions = []
-  const freeText = []
-  const tokens = input.match(/(?:[^\s:]+:"[^"]+"|[^\s:]+:\S+|\S+)/g) || []
-  tokens.forEach((token) => {
-    const match = token.match(/^([a-z]+):(.+)$/i)
-    if (!match || !queryFields.has(match[1].toLowerCase())) {
-      freeText.push(token)
-      return
-    }
-    conditions.push({ field: match[1].toLowerCase(), value: match[2].replace(/^"|"$/g, '').toLowerCase() })
-  })
-  return { conditions, freeText: freeText.join(' ').toLowerCase() }
-}
-
-function ticketMatchesQuery(ticket, input) {
-  const { conditions, freeText } = parseTicketQuery(input)
-  const searchable = [ticket.subject, ticket.customer, ticket.email, ticket.module, ticket.category, ticket.priority, ticket.assignee, ticket.department, ticket.team, ticket.tag, ...(ticket.tags || []), ticket.status, ticket.id].join(' ').toLowerCase()
-  if (freeText && !searchable.includes(freeText)) return false
-  return conditions.every(({ field, value }) => {
-    const values = field === 'tag' ? [ticket.tag, ...(ticket.tags || [])] : [field === 'assigned' ? ticket.assignee : ticket[field]]
-    return values.some((item) => String(item || '').toLowerCase().includes(value))
-  })
-}
-
-function App() {
+export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  const activeView = location.pathname === '/tickets/new'
-    ? 'Create Ticket'
-    : navigationItems.find((item) => item.path === location.pathname)?.view || (location.pathname.startsWith('/tickets') ? 'Tickets' : 'Overview')
 
-  // Live Shared State across all pages
-  const [tickets, setTickets] = useLocalStorageState('relay:tickets', initialTickets.map(enrichTicket))
-  const [customers, setCustomers] = useLocalStorageState('relay:customers', [])
-  const [agents, setAgents] = useLocalStorageState('relay:agents', initialAgents || [])
-  const [teams, setTeams] = useLocalStorageState('relay:teams', initialTeams || [])
-  const [departments, setDepartments] = useLocalStorageState('relay:departments', initialDepartments || [])
-  const [activityLog, setActivityLog] = useLocalStorageState('relay:activity', [])
-  const [storedAutomationRules, setAutomationRules] = useLocalStorageState('relay:automation-rules', initialAutomationRules)
-  const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 0)
+  // State Management with LocalStorage
+  const [tickets, setTickets] = useLocalStorageState('app_tickets_v3', initialTickets)
+  const [agents, setAgents] = useLocalStorageState('app_agents_v3', initialAgents)
+  const [customers, setCustomers] = useLocalStorageState('app_customers_v3', initialCustomersSeed)
+  const [teams, setTeams] = useLocalStorageState('app_teams_v3', initialTeams)
+  const [departments, setDepartments] = useLocalStorageState('app_departments_v3', initialDepartments)
+  const [automationRules, setAutomationRules] = useLocalStorageState('app_rules_v3', initialAutomationRules)
 
-  // -------------------------------------------------------------
-  // DYNAMIC OPTIONS FOR DROPDOWNS (Guaranteed Rich Options)
-  // -------------------------------------------------------------
-  const availableCustomers = useMemo(() => {
-    const defaultList = ['Maya Chen', 'Theo Martin', 'Priya Nair', 'Jon Bell', 'Owen Wilson', 'Imtyaz']
-    const fromState = (customers || []).map((c) => (typeof c === 'string' ? c : c.name))
-    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
-  }, [customers])
-
-  const availableAgents = useMemo(() => {
-    const defaultList = ['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Maya Patel']
-    const fromState = (agents || []).map((a) => (typeof a === 'string' ? a : a.name))
-    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
-  }, [agents])
-
-  const availableDepartments = useMemo(() => {
-    const defaultList = ['Core support', 'Finance support', 'Data support', 'Enterprise', 'Billing', 'Operations']
-    const fromState = (departments || []).map((d) => (typeof d === 'string' ? d : d.name))
-    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
-  }, [departments])
-
-  const availableTeams = useMemo(() => {
-    const defaultList = ['Core support', 'Finance support', 'Data support', 'Leadership', 'Enterprise', 'Tier 1 Support']
-    const fromState = (teams || []).map((t) => (typeof t === 'string' ? t : t.name))
-    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
-  }, [teams])
-
-  const automationRules = useMemo(() => storedAutomationRules.map((rule) => {
-    const wasMisclassifiedSlaRule = automationSchemaVersion < 1 && rule.id === 'rule-sla' && rule.name === 'SLA risk alert' && rule.triggerType === 'sla-under-hour' && rule.actionType === 'assign-manager' && rule.action === 'Assign to Kiran Shah'
-    return normalizeAutomationRule(wasMisclassifiedSlaRule ? { ...rule, actionType: 'notify-assignee', action: 'Notify assignee and manager' } : rule)
-  }), [storedAutomationRules, automationSchemaVersion])
-
-  const [query, setQuery] = useState('')
-  const [command, setCommand] = useState('')
-  const [notice, setNotice] = useState('')
-  const [noticeTone, setNoticeTone] = useState('success')
-  const [isCommandRunning, setIsCommandRunning] = useState(false)
-  const showCreate = location.pathname === '/tickets/new'
-  const setShowCreate = (visible) => {
-    if (!visible && location.pathname === '/tickets/new') navigate('/tickets')
-  }
-  const [formError, setFormError] = useState('')
-  const [ticketForm, setTicketForm] = useState({ 
-    subject: '', 
-    customer: 'Maya Chen', 
-    email: 'maya.chen@acme.co', 
-    description: '', 
-    module: 'General', 
-    category: 'General inquiry', 
-    priority: 'High', 
-    assignee: 'Unassigned', 
-    department: 'Core support', 
-    team: 'Core support', 
-    tags: '', 
-    dueDate: '', 
-    sla: 'Standard', 
-    internalNotes: '', 
-    attachments: '' 
-  })
-  const [filter, setFilter] = useState('All')
-  const [priorityFilter, setPriorityFilter] = useState('All')
-  const [assigneeFilter, setAssigneeFilter] = useState('All')
-  const [showArchived, setShowArchived] = useState(false)
+  // App UI State
   const [selectedTicketId, setSelectedTicketId] = useState(null)
+  const [ticketSearch, setTicketSearch] = useState('')
+  const [filterPriority, setFilterPriority] = useState('All')
+  const [filterStatus, setFilterStatus] = useState('All')
+  const [filterDepartment, setFilterDepartment] = useState('All')
+  const [filterAssignee, setFilterAssignee] = useState('All')
+  const [showArchived, setShowArchived] = useState(false)
+  const [dateRange, setDateRange] = useState('Today')
+  const [bannerMessage, setBannerMessage] = useState('')
+  const [assistantQuery, setAssistantQuery] = useState('')
+  const [assistantLog, setAssistantLog] = useState([])
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
-  // Entity intake modal state
-  const [entityModal, setEntityModal] = useState({
-    isOpen: false,
-    type: '',
-    name: '',
-    email: '',
-    role: 'Support agent',
-    department: 'Core support',
-    team: 'Core support',
-  })
+  // Current View via URL Routing
+  const currentView = routeViewMap[location.pathname] || 'dashboard'
 
-  const [isApiConnected, setIsApiConnected] = useState(false)
-  const [currentUser, setCurrentUser] = useState({ name: 'Workspace administrator', role: 'Administrator', avatarInitials: 'WA' })
-
-  const handleUniversalBack = () => {
-    if (selectedTicketId) {
-      setSelectedTicketId(null)
-      return
-    }
-    if (query) {
-      setQuery('')
-    }
-    if (location.pathname !== '/') {
-      navigate(-1)
-    } else {
-      setFilter('All')
-      setPriorityFilter('All')
-      setAssigneeFilter('All')
-    }
-  }
-
-  // Real-time Database and Cross-Page Sync
-  useEffect(() => {
-    let active = true
-    const syncFromDatabase = async () => {
-      try {
-        const [ticketRes, actRes, rulesRes, userRes, custRes, agentRes, teamRes, deptRes] = await Promise.all([
-          api.getTickets().catch(() => null),
-          api.getActivity().catch(() => null),
-          api.getAutomations().catch(() => null),
-          api.getCurrentUser().catch(() => null),
-          api.getCustomers().catch(() => null),
-          api.getAgents().catch(() => null),
-          api.getTeams().catch(() => null),
-          api.getDepartments().catch(() => null),
-        ])
-        if (!active) return
-
-        if (ticketRes) {
-          const list = ticketRes.items || ticketRes
-          if (Array.isArray(list) && list.length > 0) {
-            setTickets(list.map(enrichTicket))
-            setIsApiConnected(true)
-          }
-        }
-        if (actRes && Array.isArray(actRes) && actRes.length > 0) setActivityLog(actRes)
-        if (rulesRes && Array.isArray(rulesRes) && rulesRes.length > 0) setAutomationRules(rulesRes.map(normalizeAutomationRule))
-        if (custRes && Array.isArray(custRes)) setCustomers(custRes)
-        if (agentRes && Array.isArray(agentRes)) setAgents(agentRes)
-        if (teamRes && Array.isArray(teamRes)) setTeams(teamRes)
-        if (deptRes && Array.isArray(deptRes)) setDepartments(deptRes)
-        if (userRes?.name) setCurrentUser(userRes)
-      } catch (err) {
-        console.warn('[Database Sync]', err.message)
-      }
-    }
-
-    syncFromDatabase()
-    const syncInterval = window.setInterval(syncFromDatabase, 4000)
-
-    const onDataChanged = () => syncFromDatabase()
-    window.addEventListener('storage', onDataChanged)
-    window.addEventListener('relay:data-updated', onDataChanged)
-
-    return () => {
-      active = false
-      window.clearInterval(syncInterval)
-      window.removeEventListener('storage', onDataChanged)
-      window.removeEventListener('relay:data-updated', onDataChanged)
-    }
+  // Dynamic Header Date
+  const formattedToday = useMemo(() => {
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
   }, [])
 
-  const goToView = (view) => {
-    const target = navigationItems.find((item) => item.view === view)
-    if (target && location.pathname !== target.path) navigate(target.path)
-  }
+  // Auto-clear banner messages
+  useEffect(() => {
+    if (!bannerMessage) return
+    const timer = setTimeout(() => setBannerMessage(''), 4500)
+    return () => clearTimeout(timer)
+  }, [bannerMessage])
 
-  const filteredTickets = useMemo(() => tickets.filter((ticket) => {
-    if (ticket.archived && !showArchived) return false
-    const matchesQuery = ticketMatchesQuery(ticket, query)
-    return matchesQuery && (filter === 'All' || ticket.status === filter) && (priorityFilter === 'All' || ticket.priority === priorityFilter) && (assigneeFilter === 'All' || ticket.assignee === assigneeFilter)
-  }), [tickets, query, filter, priorityFilter, assigneeFilter, showArchived])
+  // Sync API on Initial Mount
+  useEffect(() => {
+    let isMounted = true
+    const syncBackendData = async () => {
+      try {
+        const [ticketsRes, agentsRes, customersRes] = await Promise.allSettled([
+          api.getTickets(),
+          api.getAgents(),
+          api.getCustomers()
+        ])
 
-  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId)
+        if (!isMounted) return
 
-  const recordActivity = (action) => {
-    const entry = { id: crypto.randomUUID(), action, actor: 'Workspace administrator', createdAt: new Date().toISOString() }
-    setActivityLog((current) => [entry, ...current])
-  }
-
-  const saveTickets = (nextTickets) => {
-    const enrichedTickets = nextTickets.map(enrichTicket)
-    setTickets(enrichedTickets)
-    window.dispatchEvent(new Event('relay:data-updated'))
-  }
-
-  const saveWithAutomation = (nextTickets, ticketIds) => {
-    const result = runAutomationRules(nextTickets, automationRules, { ticketIds })
-    saveTickets(result.tickets)
-    setAutomationRules(result.rules)
-    result.events.forEach(recordActivity)
-    if (result.events.length) setNotice(result.events.join('. '))
-    window.dispatchEvent(new Event('relay:data-updated'))
-    return result
-  }
-
-  const updateTicket = (ticketId, changes, message) => {
-    if (changes.removeTicket) {
-      saveTickets(tickets.filter((ticket) => ticket.id !== ticketId))
-      setSelectedTicketId(null)
-      recordActivity(message)
-      setNotice(message)
-      api.deleteTicket(ticketId).catch(() => {})
-      window.dispatchEvent(new Event('relay:data-updated'))
-      return
+        if (ticketsRes.status === 'fulfilled' && Array.isArray(ticketsRes.value) && ticketsRes.value.length > 0) {
+          setTickets(ticketsRes.value)
+        }
+        if (agentsRes.status === 'fulfilled' && Array.isArray(agentsRes.value) && agentsRes.value.length > 0) {
+          setAgents(agentsRes.value)
+        }
+        if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value) && customersRes.value.length > 0) {
+          setCustomers(customersRes.value)
+        }
+      } catch (err) {
+        console.warn('Backend sync skipped, using local reactive state.', err)
+      }
     }
-    api.updateTicket(ticketId, changes).catch(() => {})
-    const result = saveWithAutomation(tickets.map((ticket) => ticket.id === ticketId ? {
-      ...ticket,
-      ...changes,
-      resolvedAt: changes.status === 'Resolved' ? ticket.resolvedAt || new Date().toISOString() : ticket.resolvedAt,
-    } : ticket), [ticketId])
-    recordActivity(message)
-    setNotice([message, ...result.events].join('. '))
-    window.dispatchEvent(new Event('relay:data-updated'))
+    syncBackendData()
+    return () => { isMounted = false }
+  }, [])
+
+  // Live Clean Arrays for Dropdowns (Zero Hardcoding - strictly reflects live state)
+  const liveCustomerNames = useMemo(() => {
+    return (customers || []).map(c => typeof c === 'string' ? c : c?.name).filter(Boolean)
+  }, [customers])
+
+  const liveAgentNames = useMemo(() => {
+    return (agents || []).map(a => typeof a === 'string' ? a : a?.name).filter(Boolean)
+  }, [agents])
+
+  const liveDepartmentNames = useMemo(() => {
+    return (departments || []).map(d => typeof d === 'string' ? d : d?.name).filter(Boolean)
+  }, [departments])
+
+  const liveTeamNames = useMemo(() => {
+    return (teams || []).map(t => typeof t === 'string' ? t : t?.name).filter(Boolean)
+  }, [teams])
+
+  // Create Ticket Form State
+  const [newTicketForm, setNewTicketForm] = useState({
+    subject: '',
+    customer: '',
+    email: '',
+    priority: 'Medium',
+    status: 'Open',
+    assignee: 'Unassigned',
+    department: '',
+    team: '',
+    description: '',
+    sla: 'Standard',
+    module: 'Core',
+    dueDate: 'Today, 9:00 PM',
+    tags: '',
+  })
+
+  const handleCreateTicketChange = (e) => {
+    const { name, value } = e.target
+    setNewTicketForm(prev => {
+      const next = { ...prev, [name]: value }
+      if (name === 'customer') {
+        const found = (customers || []).find(c => (typeof c === 'object' ? c.name : c) === value)
+        if (found && typeof found === 'object' && found.email) {
+          next.email = found.email
+        }
+      }
+      return next
+    })
   }
 
-  const toggleArchiveTicket = (ticketId) => {
-    const target = tickets.find((t) => t.id === ticketId)
-    if (!target) return
-    const isNowArchived = !target.archived
-    updateTicket(
-      ticketId,
-      { archived: isNowArchived },
-      isNowArchived ? `Ticket #${ticketId} moved to archive` : `Ticket #${ticketId} restored from archive`
-    )
-  }
-
-  const handleSaveEntity = async (e) => {
+  // Create Ticket Submit Action
+  const handleCreateTicketSubmit = (e) => {
     e.preventDefault()
-    if (!entityModal.name.trim()) return
-
-    const newObj = {
-      id: Date.now(),
-      name: entityModal.name,
-      email: entityModal.email,
-      role: entityModal.role,
-      department: entityModal.department,
-      team: entityModal.team,
-    }
-
-    try {
-      if (entityModal.type === 'Agent') {
-        await api.createAgent(newObj)
-        setAgents((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      } else if (entityModal.type === 'Customer') {
-        await api.createCustomer(newObj)
-        setCustomers((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      } else if (entityModal.type === 'Team') {
-        await api.createTeam(newObj)
-        setTeams((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      } else if (entityModal.type === 'Department') {
-        await api.createDepartment(newObj)
-        setDepartments((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      }
-      recordActivity(`Created new ${entityModal.type}: ${entityModal.name}`)
-      setNotice(`${entityModal.type} "${entityModal.name}" created successfully.`)
-      setNoticeTone('success')
-      window.dispatchEvent(new Event('relay:data-updated'))
-    } catch (err) {
-      if (entityModal.type === 'Agent') setAgents((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      else if (entityModal.type === 'Customer') setCustomers((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      else if (entityModal.type === 'Team') setTeams((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      else if (entityModal.type === 'Department') setDepartments((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
-      recordActivity(`Created new ${entityModal.type}: ${entityModal.name} (locally)`)
-      setNotice(`${entityModal.type} "${entityModal.name}" created.`)
-      setNoticeTone('success')
-      window.dispatchEvent(new Event('relay:data-updated'))
-    }
-    setEntityModal({ isOpen: false, type: '', name: '', email: '', role: 'Support agent', department: 'Core support', team: 'Core support' })
-  }
-
-  const runCommand = async () => {
-    if (!command.trim() || isCommandRunning) return
-    setIsCommandRunning(true)
-
-    const raw = command.trim()
-    const lower = raw.toLowerCase()
-
-    if (/^(?:create|new|add)\s+ticket/i.test(lower)) {
-      navigate('/tickets/new')
-      setCommand('')
-      setIsCommandRunning(false)
+    if (!newTicketForm.subject.trim() || !newTicketForm.customer.trim() || !newTicketForm.description.trim()) {
+      alert('Please fill Subject, Customer, and Description.')
       return
     }
 
-    const entityMatch = lower.match(/^(?:create|new|add)\s+(agent|customer|team|department)(?:\s+(.+))?$/i)
-    if (entityMatch) {
-      const type = entityMatch[1].toLowerCase()
-      const name = entityMatch[2]?.replace(/^name=["']?|["']$/g, '').trim() || ''
-      setEntityModal({
-        isOpen: true,
-        type: type.charAt(0).toUpperCase() + type.slice(1),
-        name,
-        email: '',
-        role: 'Support agent',
-        department: 'Core support',
-        team: 'Core support',
-      })
-      setCommand('')
-      setIsCommandRunning(false)
-      return
-    }
+    const nextId = tickets.length > 0 ? Math.max(...tickets.map(t => t.id || 0)) + 1 : 1001
+    const tagsArr = newTicketForm.tags ? newTicketForm.tags.split(',').map(t => t.trim()).filter(Boolean) : ['New']
+    const initials = newTicketForm.customer.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase()
 
-    try {
-      const intent = parseWorkspaceCommand(raw, { tickets })
-      const handled = await applyWorkspaceCommand(intent, {
-        tickets,
-        navigate: (target) => navigationItems.some((item) => item.view === target) ? goToView(target) : navigate(target),
-        openTicketSearch,
-        saveWithAutomation,
-        updateTicket,
-        recordActivity,
-        runAutomationNow,
-        setNotice,
-        confirmAction: (message) => window.confirm(message),
-        answerQuestion: (question) => answerWorkspaceQuestion(question, tickets),
-        exportReport: () => downloadTicketReport(tickets),
-      })
-      if (!handled) {
-        setNoticeTone('error')
-        setNotice(commandHelp())
-      } else {
-        setNoticeTone('success')
-      }
-      window.dispatchEvent(new Event('relay:data-updated'))
-    } catch (err) {
-      setNoticeTone('error')
-      setNotice(err.message || 'Error executing command')
-    } finally {
-      setCommand('')
-      setIsCommandRunning(false)
-    }
-  }
-
-  const createTicket = async () => {
-    if (!ticketForm.subject.trim() || !ticketForm.customer.trim() || !ticketForm.description.trim()) {
-      setFormError('Subject, customer, and description are required.')
-      return
-    }
-    const nextId = Math.max(...tickets.map((ticket) => ticket.id), 0) + 1
-    const initials = ticketForm.customer.trim().split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-    const createdDate = new Date().toLocaleString()
-    const tags = ticketForm.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
-    const attachments = ticketForm.attachments ? ticketForm.attachments.split(',').map((file) => file.trim()).filter(Boolean) : []
-    const payload = {
-      subject: ticketForm.subject.trim(),
-      customer: ticketForm.customer.trim(),
-      email: ticketForm.email.trim() || 'customer@example.com',
-      description: ticketForm.description.trim(),
-      module: ticketForm.module,
-      category: ticketForm.category,
-      priority: ticketForm.priority,
-      status: 'Open',
-      assignee: ticketForm.assignee,
-      department: ticketForm.department,
-      team: ticketForm.team,
-      tags,
-      dueDate: ticketForm.dueDate || '',
-      sla: ticketForm.sla,
-      attachments,
+    const newTicket = {
+      id: nextId,
+      subject: newTicketForm.subject.trim(),
+      customer: newTicketForm.customer.trim(),
+      initials,
+      email: newTicketForm.email.trim() || 'customer@example.com',
+      description: newTicketForm.description.trim(),
+      module: newTicketForm.module || 'General',
+      department: newTicketForm.department || 'Core support',
+      team: newTicketForm.team || 'Core support',
+      channel: 'Web',
+      priority: newTicketForm.priority,
+      status: newTicketForm.status,
+      assignee: newTicketForm.assignee,
+      sla: newTicketForm.status === 'Resolved' ? 'Closed' : newTicketForm.sla,
+      created: 'Just now',
+      dueDate: newTicketForm.dueDate || 'Today, 11:00 PM',
+      tag: tagsArr[0] || 'General',
+      tags: tagsArr,
+      comments: [],
+      history: ['Ticket created via Workspace Portal'],
       archived: false,
     }
 
-    try {
-      const created = await api.createTicket(payload)
-      if (created?.id) {
-        saveWithAutomation([enrichTicket(created), ...tickets], [created.id])
-      } else {
-        saveWithAutomation([{ id: nextId, ...payload, initials, tag: tags[0] || 'New', created: 'Just now', createdDate, updatedDate: createdDate, comments: [], internalNotes: [], history: ['Ticket created from intake form'] }, ...tickets], [nextId])
-      }
-    } catch {
-      saveWithAutomation([{ id: nextId, ...payload, initials, tag: tags[0] || 'New', created: 'Just now', createdDate, updatedDate: createdDate, comments: [], internalNotes: [], history: ['Ticket created from intake form'] }, ...tickets], [nextId])
-    }
+    // Run Automations if any
+    const { ticket: processedTicket, log } = runAutomationRules(newTicket, automationRules)
+    const finalTicket = processedTicket || newTicket
 
-    recordActivity(`Created ticket #${nextId} from intake form`)
-    setShowCreate(false)
-    setFormError('')
-    setTicketForm({ subject: '', customer: 'Maya Chen', email: 'maya.chen@acme.co', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
-    goToView('Tickets')
-    setNotice(`Ticket created and synchronized with database.`)
-    window.dispatchEvent(new Event('relay:data-updated'))
+    setTickets(prev => [finalTicket, ...prev])
+    setBannerMessage(`Ticket #${nextId} created successfully! ${log ? `(${log.length} automations run)` : ''}`)
+    setIsCreateModalOpen(false)
+    setNewTicketForm({
+      subject: '',
+      customer: '',
+      email: '',
+      priority: 'Medium',
+      status: 'Open',
+      assignee: 'Unassigned',
+      department: '',
+      team: '',
+      description: '',
+      sla: 'Standard',
+      module: 'Core',
+      dueDate: 'Today, 9:00 PM',
+      tags: '',
+    })
+
+    // Background Backend Post
+    api.createTicket(finalTicket).catch(err => console.warn('Saved locally, API offline:', err))
   }
 
-  const openTicketSearch = (search = '') => {
-    setQuery(search)
-    setFilter('All')
-    setPriorityFilter('All')
-    setAssigneeFilter('All')
-    navigate('/tickets')
-  }
-
-  const recordManagementActivity = (action) => {
-    recordActivity(action)
-    setNotice(action)
-  }
-
-  const runAutomationNow = () => {
-    const result = runAutomationRules(tickets, automationRules)
-    if (!result.events.length) {
-      setNotice('No active automation rules matched any unprocessed tickets.')
+  // Update Ticket (or Delete if updatedData is null)
+  const updateTicket = (ticketId, updatedData, bannerMsg) => {
+    if (updatedData === null) {
+      setTickets(prev => prev.filter(t => t.id !== ticketId))
+      setBannerMessage(bannerMsg || `Ticket #${ticketId} deleted.`)
+      api.deleteTicket(ticketId).catch(err => console.warn('Deleted locally:', err))
       return
     }
-    saveTickets(result.tickets)
-    setAutomationRules(result.rules)
-    result.events.forEach(recordActivity)
-    const actionCount = result.events.filter((event) => event.includes('applied to ticket #')).length
-    setNotice(`Automation completed: ${actionCount} action(s) applied.`)
-    window.dispatchEvent(new Event('relay:data-updated'))
+
+    setTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, ...updatedData } : t)))
+    if (bannerMsg) setBannerMessage(bannerMsg)
+    api.updateTicket(ticketId, updatedData).catch(err => console.warn('Updated locally:', err))
+  }
+
+  // Toggle Archive Action
+  const toggleArchiveTicket = (ticketId) => {
+    setTickets(prev => prev.map(t => {
+      if (t.id === ticketId) {
+        const nextArchived = !t.archived
+        const actionText = nextArchived ? 'archived' : 'unarchived'
+        setBannerMessage(`Ticket #${ticketId} ${actionText}.`)
+        return {
+          ...t,
+          archived: nextArchived,
+          history: [...(t.history || []), `Ticket ${actionText} by Workspace administrator`]
+        }
+      }
+      return t
+    }))
+  }
+
+  // Counts & Filtering
+  const archivedCount = useMemo(() => tickets.filter(t => t.archived).length, [tickets])
+  const activeTicketsCount = useMemo(() => tickets.filter(t => !t.archived).length, [tickets])
+
+  const visibleTickets = useMemo(() => {
+    return tickets.filter(ticket => {
+      // Archive Filter
+      if (showArchived) {
+        if (!ticket.archived) return false
+      } else {
+        if (ticket.archived) return false
+      }
+
+      // Priority Filter
+      if (filterPriority !== 'All' && ticket.priority !== filterPriority) return false
+      // Status Filter
+      if (filterStatus !== 'All' && ticket.status !== filterStatus) return false
+      // Department Filter
+      if (filterDepartment !== 'All' && ticket.department !== filterDepartment) return false
+      // Assignee Filter
+      if (filterAssignee !== 'All' && ticket.assignee !== filterAssignee) return false
+
+      // Search Filter
+      if (ticketSearch.trim()) {
+        const q = ticketSearch.toLowerCase()
+        const matchSub = (ticket.subject || '').toLowerCase().includes(q)
+        const matchCust = (ticket.customer || '').toLowerCase().includes(q)
+        const matchDesc = (ticket.description || '').toLowerCase().includes(q)
+        const matchId = String(ticket.id).includes(q)
+        if (!matchSub && !matchCust && !matchDesc && !matchId) return false
+      }
+
+      return true
+    })
+  }, [tickets, showArchived, filterPriority, filterStatus, filterDepartment, filterAssignee, ticketSearch])
+
+  // Selected Ticket for Drawer
+  const selectedTicket = useMemo(() => {
+    return tickets.find(t => t.id === selectedTicketId) || null
+  }, [tickets, selectedTicketId])
+
+  // AI Assistant Command Runner
+  const handleAssistantSubmit = (e) => {
+    e.preventDefault()
+    if (!assistantQuery.trim()) return
+
+    const query = assistantQuery.trim()
+    const parsedCmd = parseWorkspaceCommand(query)
+
+    if (parsedCmd && parsedCmd.type !== 'UNKNOWN') {
+      const result = applyWorkspaceCommand(parsedCmd, {
+        tickets,
+        setTickets,
+        agents,
+        setAgents,
+        customers,
+        setCustomers,
+        departments,
+        setDepartments,
+        teams,
+        setTeams,
+      })
+      setAssistantLog(prev => [{ q: query, a: result.message, timestamp: new Date().toLocaleTimeString() }, ...prev])
+      setBannerMessage(result.message)
+    } else {
+      const answer = answerWorkspaceQuestion(query, { tickets, agents, customers, departments, teams })
+      setAssistantLog(prev => [{ q: query, a: answer, timestamp: new Date().toLocaleTimeString() }, ...prev])
+    }
+    setAssistantQuery('')
   }
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">T</span><span>Ticket<span className="brand-dot"> Desk</span></span></div>
-        <div className="workspace-switcher"><span className="workspace-avatar">T</span><span><strong>Ticket Management</strong><small>Support workspace</small></span><span className="chevron">⌄</span></div>
-        <nav className="sidebar-navigation">{navigationGroups.map((group) => <div className="nav-group" key={group.label}><p className="eyebrow">{group.label}</p>{group.items.map((item) => <button className={`nav-item ${location.pathname === item.path || (item.path === '/tickets' && location.pathname.startsWith('/tickets')) ? 'active' : ''}`} onClick={() => item.path === '/tickets/new' ? navigate('/tickets/new') : navigate(item.path)} key={item.path}><span className="nav-icon">{item.icon}</span>{item.label}{item.label === 'Tickets' && <span className="nav-count">{tickets.length}</span>}</button>)}</div>)}</nav>
-        <div className="sidebar-bottom">
-          <div className="upgrade-card"><span className="spark">✦</span><strong>Unlock command mode</strong><p>Automate triage and resolve tickets faster.</p><button onClick={() => setNotice('Command mode is already enabled in this demo.')}>Explore AI tools <span>→</span></button></div>
-          <div className="profile"><span className="profile-avatar">WA</span><span><strong>Workspace administrator</strong><small>Administrator</small></span><span className="more">•••</span></div>
+      {/* Top Banner Notifications */}
+      {bannerMessage && (
+        <div className="app-alert-banner">
+          <span>{bannerMessage}</span>
+          <button type="button" onClick={() => setBannerMessage('')}>×</button>
         </div>
-      </aside>
-
-      <main className="main-content">
-        <header className="topbar">
-          <div className="breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              className="secondary-button"
-              style={{
-                padding: '4px 12px',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                borderRadius: '6px',
-                fontWeight: '600',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              onClick={handleUniversalBack}
-              title="Go back"
-            >
-              ← Back
-            </button>
-            <span>Workspace</span><b>/</b><strong>{activeView}</strong>
-          </div>
-
-          <div className="top-actions">
-            <button className="icon-button" onClick={() => setNotice('You are all caught up.')} title="Notifications">♧<span className="notification-dot" /></button>
-            <button className="help-button" onClick={() => navigate('/knowledge-base')} title="Knowledge Base & Help Center">?</button>
-            <button className="new-button" onClick={() => navigate('/tickets/new')}><span>+</span> New ticket</button>
-          </div>
-        </header>
-
-        <section className="content-wrap">
-          <div className="heading-row">
-            <div>
-              <p className="overline">
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </p>
-              <h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1>
-              <p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p>
-            </div>
-            
-            {/* Live Interactive Date Range Selector */}
-            <select
-              className="date-pill"
-              defaultValue="Last 30 days"
-              style={{
-                cursor: 'pointer',
-                background: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '20px',
-                padding: '6px 14px',
-                fontWeight: '600',
-                color: '#334155',
-                outline: 'none',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-              }}
-              onChange={(e) => {
-                setNotice(`Showing workspace records for: ${e.target.value}`)
-                setNoticeTone('success')
-              }}
-            >
-              <option value="Last 30 days">Last 30 days ⌄</option>
-              <option value="Today">Today</option>
-              <option value="Last 7 days">Last 7 days</option>
-              <option value="This Quarter">This Quarter</option>
-              <option value="All time">All time</option>
-            </select>
-          </div>
-
-          {notice && <div className={`notice notice-${noticeTone}`}><span>{noticeTone === 'success' ? '✓' : '!'}</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
-          {activeView === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => navigate('/tickets')} />}
-          
-          {/* Live Interactive Archive Toggle */}
-          {activeView === 'Tickets' && (
-            <label className="archived-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '10px 0', fontWeight: '600' }}>
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(event) => {
-                  setShowArchived(event.target.checked)
-                  setNotice(event.target.checked ? 'Showing active and archived tickets' : 'Showing active tickets only')
-                }}
-              />
-              Show archived ({tickets.filter((ticket) => ticket.archived).length})
-            </label>
-          )}
-
-          {activeView === 'Tickets' && (
-            <TicketView
-              tickets={filteredTickets}
-              query={query}
-              setQuery={setQuery}
-              filter={filter}
-              setFilter={setFilter}
-              priorityFilter={priorityFilter}
-              setPriorityFilter={setPriorityFilter}
-              assigneeFilter={assigneeFilter}
-              setAssigneeFilter={setAssigneeFilter}
-              onSelect={setSelectedTicketId}
-              onCreate={() => navigate('/tickets/new')}
-              onToggleArchive={toggleArchiveTicket}
-            />
-          )}
-
-          {activeView === 'Automation' && <AutomationPage rules={automationRules} setRules={setAutomationRules} onActivity={recordManagementActivity} onRunRules={runAutomationNow} />}
-          
-          {/* Real-time Connected Reports Page */}
-          {activeView === 'Reports' && (
-            <ReportsPage
-              tickets={tickets}
-              customers={customers}
-              agents={agents}
-              teams={teams}
-              departments={departments}
-              automationRules={automationRules}
-              activityLog={activityLog}
-              onActivity={recordManagementActivity}
-              onOpenTickets={() => openTicketSearch()}
-            />
-          )}
-
-          {/* Dedicated Professional Settings Page */}
-          {activeView === 'Settings' && (
-            <SettingsView
-              tickets={tickets}
-              onNotice={setNotice}
-              onActivity={recordManagementActivity}
-            />
-          )}
-
-          {/* Management Pages for other workspace views */}
-          {['Customers', 'Agents', 'Teams', 'Departments', 'Knowledge Base', 'Notifications', 'AI Assistant', 'Admin'].includes(activeView) && (
-            <ManagementPages
-              view={activeView}
-              tickets={tickets}
-              activityLog={activityLog}
-              onNotice={setNotice}
-              onActivity={recordManagementActivity}
-              onOpenTickets={(search = '') => openTicketSearch(search)}
-            />
-          )}
-        </section>
-      </main>
-
-      <div className="command-bar"><div className="command-label"><span className="command-symbol">✦</span><strong>AI Command Box</strong><small>Workspace actions</small></div><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runCommand()} placeholder={'e.g. create agent, total customers, or show open tickets'} /><kbd>Enter</kbd><button onClick={runCommand} disabled={isCommandRunning || !command.trim()}>{isCommandRunning ? <><span className="command-spinner" />Running...</> : <>Run command <span>↗</span></>}</button></div>
-      
-      {/* Drawer with dynamic Dropdowns passed */}
-      {selectedTicket && (
-        <TicketDetailProfessional 
-          ticket={selectedTicket} 
-          onClose={() => setSelectedTicketId(null)} 
-          onUpdate={updateTicket}
-          customers={availableCustomers}
-          agents={availableAgents}
-          teams={availableTeams}
-          departments={availableDepartments}
-        />
       )}
-      
-      {/* ------------------------------------------------------------- */}
-      {/* NEW TICKET MODAL WITH 100% RELATIONAL ENTITY DROPDOWNS       */}
-      {/* ------------------------------------------------------------- */}
-      {showCreate && (
-        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
-          <div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <p className="overline">Ticket intake</p>
-                <h2>Create a new ticket</h2>
-              </div>
-              <button className="close-button" onClick={() => setShowCreate(false)}>×</button>
-            </div>
-            
-            {formError && <div className="form-error" role="alert">! {formError}</div>}
-            
-            <div className="form-row">
-              <label>
-                Subject *
-                <input 
-                  value={ticketForm.subject} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, subject: event.target.value })} 
-                  placeholder="Short issue summary" 
-                  required
-                />
-              </label>
 
-              {/* 1. CUSTOMER DROPDOWN */}
-              <label>
-                Customer *
-                <select
-                  value={ticketForm.customer}
-                  onChange={(event) => {
-                    const selectedName = event.target.value
-                    const generatedEmail = `${selectedName.toLowerCase().replace(/\s+/g, '.')}@example.com`
-                    setTicketForm({
-                      ...ticketForm,
-                      customer: selectedName,
-                      email: generatedEmail,
-                    })
-                  }}
-                  required
-                >
-                  {availableCustomers.map((cName) => (
-                    <option key={cName} value={cName}>{cName}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
+      {/* Main Top Header */}
+      <header className="app-header">
+        <div className="header-brand">
+          <div className="brand-logo">T</div>
+          <div>
+            <h1 className="brand-title">Ticket Management System</h1>
+            <p className="brand-subtitle">Enterprise Operations & Support Portal</p>
+          </div>
+        </div>
 
-            <div className="form-row">
-              <label>
-                Customer email
-                <input 
-                  type="email" 
-                  value={ticketForm.email} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, email: event.target.value })} 
-                  placeholder="customer@example.com" 
-                />
-              </label>
-              <label>
-                Module
-                <input 
-                  value={ticketForm.module} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, module: event.target.value })} 
-                  placeholder="Billing, Account, Workspace..." 
-                />
-              </label>
-            </div>
+        <div className="header-meta">
+          <div className="date-indicator">
+            <span className="live-dot" />
+            <span>{formattedToday}</span>
+          </div>
 
-            <div className="form-row">
-              <label>
-                Category
-                <select 
-                  value={ticketForm.category} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, category: event.target.value })}
-                >
-                  <option value="General inquiry">General inquiry</option>
-                  <option value="Technical incident">Technical incident</option>
-                  <option value="Billing question">Billing question</option>
-                  <option value="Feature request">Feature request</option>
-                  <option value="Security inquiry">Security inquiry</option>
-                </select>
-              </label>
-              <label>
-                Priority
-                <select 
-                  value={ticketForm.priority} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, priority: event.target.value })}
-                >
+          <select 
+            className="date-pill" 
+            value={dateRange} 
+            onChange={(e) => setDateRange(e.target.value)}
+          >
+            <option value="Today">Today (Live)</option>
+            <option value="Yesterday">Yesterday</option>
+            <option value="Last 7 Days">Last 7 Days</option>
+            <option value="This Month">This Month</option>
+          </select>
+
+          <button 
+            type="button" 
+            className="btn btn-primary btn-sm"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            + Create Ticket
+          </button>
+
+          <button 
+            type="button" 
+            className="btn btn-secondary btn-sm"
+            onClick={() => setIsAssistantOpen(!isAssistantOpen)}
+          >
+            💬 Copilot
+          </button>
+        </div>
+      </header>
+
+      {/* Main Layout Grid */}
+      <div className="app-body">
+        {/* Navigation Sidebar */}
+        <nav className="app-sidebar">
+          <div className="nav-group-title">WORKSPACE</div>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => navigate('/dashboard')}
+          >
+            📊 Dashboard
+          </button>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'tickets' ? 'active' : ''}`}
+            onClick={() => navigate('/tickets')}
+          >
+            🎫 Tickets <span className="nav-count">{activeTicketsCount}</span>
+          </button>
+
+          <div className="nav-group-title">RELATIONS & ORG</div>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'customers' ? 'active' : ''}`}
+            onClick={() => navigate('/customers')}
+          >
+            👥 Customers <span className="nav-count">{customers.length}</span>
+          </button>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'agents' ? 'active' : ''}`}
+            onClick={() => navigate('/agents')}
+          >
+            🎧 Agents <span className="nav-count">{agents.length}</span>
+          </button>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'teams' ? 'active' : ''}`}
+            onClick={() => navigate('/teams')}
+          >
+            🛡️ Teams <span className="nav-count">{teams.length}</span>
+          </button>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'departments' ? 'active' : ''}`}
+            onClick={() => navigate('/departments')}
+          >
+            🏢 Departments <span className="nav-count">{departments.length}</span>
+          </button>
+
+          <div className="nav-group-title">OPERATIONS</div>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'automation' ? 'active' : ''}`}
+            onClick={() => navigate('/automation')}
+          >
+            ⚡ Automation Rules
+          </button>
+          <button 
+            type="button" 
+            className={`nav-link ${currentView === 'reports' ? 'active' : ''}`}
+            onClick={() => navigate('/reports')}
+          >
+            📈 Reports & SLA
+          </button>
+        </nav>
+
+        {/* Dynamic Main View Area */}
+        <main className="app-content">
+          {currentView === 'dashboard' && (
+            <Dashboard 
+              tickets={tickets} 
+              onSelectTicket={(id) => setSelectedTicketId(id)}
+              onNavigate={(path) => navigate(path)}
+              dateRange={dateRange}
+            />
+          )}
+
+          {currentView === 'tickets' && (
+            <div className="tickets-view-container">
+              {/* Ticket Controls Filter Bar */}
+              <div className="tickets-toolbar">
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Search subject, customer, ID..."
+                  value={ticketSearch}
+                  onChange={(e) => setTicketSearch(e.target.value)}
+                />
+
+                <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+                  <option value="All">All Priorities</option>
                   <option value="Critical">Critical</option>
                   <option value="High">High</option>
                   <option value="Medium">Medium</option>
                   <option value="Low">Low</option>
                 </select>
-              </label>
+
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="All">All Statuses</option>
+                  <option value="Open">Open</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Resolved">Resolved</option>
+                </select>
+
+                <select value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
+                  <option value="All">All Departments</option>
+                  {liveDepartmentNames.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+
+                <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+                  <option value="All">All Assignees</option>
+                  {liveAgentNames.map(agent => (
+                    <option key={agent} value={agent}>{agent}</option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  className={`btn btn-sm ${showArchived ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setShowArchived(!showArchived)}
+                >
+                  {showArchived ? 'Viewing Archived' : `Show Archived (${archivedCount})`}
+                </button>
+              </div>
+
+              {/* Tickets Table */}
+              <div className="tickets-table-wrapper">
+                <table className="tickets-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Subject</th>
+                      <th>Customer</th>
+                      <th>Assignee</th>
+                      <th>Department</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th>SLA / Due</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleTickets.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="empty-table-cell">
+                          No {showArchived ? 'archived' : 'active'} tickets found matching the selected filters.
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleTickets.map((t) => (
+                        <tr 
+                          key={t.id} 
+                          className="ticket-row-clickable"
+                          onClick={() => setSelectedTicketId(t.id)}
+                        >
+                          <td className="ticket-id-cell">#{t.id}</td>
+                          <td className="ticket-subject-cell">
+                            <span className="ticket-subject-text">{t.subject}</span>
+                            <span className="ticket-meta-subtitle">{t.module || 'General'}</span>
+                          </td>
+                          <td>
+                            <div className="customer-info-cell">
+                              <span className="customer-avatar">{t.initials || t.customer?.slice(0, 2).toUpperCase()}</span>
+                              <span>{t.customer}</span>
+                            </div>
+                          </td>
+                          <td>{t.assignee || 'Unassigned'}</td>
+                          <td>{t.department || 'Core support'}</td>
+                          <td>
+                            <span className={`priority-pill priority-${(t.priority || 'medium').toLowerCase()}`}>
+                              {t.priority}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`status-pill status-${(t.status || 'open').toLowerCase()}`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td className="sla-cell">
+                            <span className={t.sla?.includes('00:') ? 'sla-danger' : ''}>{t.sla}</span>
+                            <span className="due-date-sub">{t.dueDate}</span>
+                          </td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-xs"
+                              onClick={() => toggleArchiveTicket(t.id)}
+                            >
+                              {t.archived ? 'Unarchive' : 'Archive'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Management Pages: Customers, Agents, Teams, Departments */}
+          {['customers', 'agents', 'teams', 'departments'].includes(currentView) && (
+            <ManagementPages
+              view={currentView}
+              customers={customers}
+              setCustomers={setCustomers}
+              agents={agents}
+              setAgents={setAgents}
+              teams={teams}
+              setTeams={setTeams}
+              departments={departments}
+              setDepartments={setDepartments}
+              tickets={tickets}
+              onNavigate={(v) => navigate(`/${v}`)}
+            />
+          )}
+
+          {currentView === 'automation' && (
+            <AutomationPage 
+              rules={automationRules} 
+              setRules={setAutomationRules} 
+            />
+          )}
+
+          {currentView === 'reports' && (
+            <ReportsPage 
+              tickets={tickets} 
+              agents={agents} 
+            />
+          )}
+        </main>
+      </div>
+
+      {/* CREATE TICKET MODAL (WITH 100% STRICT LIVE DROPDOWNS) */}
+      {isCreateModalOpen && (
+        <div className="ticket-detail-overlay" onClick={() => setIsCreateModalOpen(false)}>
+          <div className="ticket-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create New Ticket</h2>
+              <button type="button" className="close-btn" onClick={() => setIsCreateModalOpen(false)}>×</button>
             </div>
 
-            <div className="form-row">
-              {/* 2. ASSIGNED AGENT DROPDOWN */}
-              <label>
-                Assigned agent
-                <select 
-                  value={ticketForm.assignee} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, assignee: event.target.value })}
-                >
-                  <option value="Unassigned">Unassigned</option>
-                  {availableAgents.map((aName) => (
-                    <option key={aName} value={aName}>{aName}</option>
-                  ))}
-                </select>
-              </label>
-
-              {/* 3. DEPARTMENT DROPDOWN */}
-              <label>
-                Department
-                <select 
-                  value={ticketForm.department} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, department: event.target.value })}
-                >
-                  {availableDepartments.map((dName) => (
-                    <option key={dName} value={dName}>{dName}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="form-row">
-              {/* 4. TEAM DROPDOWN */}
-              <label>
-                Team
-                <select 
-                  value={ticketForm.team} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, team: event.target.value })}
-                >
-                  {availableTeams.map((tName) => (
-                    <option key={tName} value={tName}>{tName}</option>
-                  ))}
-                </select>
-              </label>
-              
-              <label>
-                Due date
-                <input 
-                  type="datetime-local" 
-                  value={ticketForm.dueDate} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, dueDate: event.target.value })} 
+            <form onSubmit={handleCreateTicketSubmit} className="ticket-edit-form modal-form">
+              <div className="form-group">
+                <label>Subject *</label>
+                <input
+                  type="text"
+                  name="subject"
+                  value={newTicketForm.subject}
+                  onChange={handleCreateTicketChange}
+                  placeholder="e.g. Cannot export monthly report"
+                  required
                 />
-              </label>
-            </div>
+              </div>
 
-            <div className="form-row">
-              <label>
-                SLA
-                <select 
-                  value={ticketForm.sla} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, sla: event.target.value })}
-                >
-                  <option value="Standard">Standard</option>
-                  <option value="Priority">Priority</option>
-                  <option value="Enterprise">Enterprise</option>
-                  <option value="Custom">Custom</option>
-                </select>
-              </label>
-              <label>
-                Tags
-                <input 
-                  value={ticketForm.tags} 
-                  onChange={(event) => setTicketForm({ ...ticketForm, tags: event.target.value })} 
-                  placeholder="billing, urgent (comma separated)" 
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Customer * (Live)</label>
+                  <select
+                    name="customer"
+                    value={newTicketForm.customer}
+                    onChange={handleCreateTicketChange}
+                    required
+                  >
+                    <option value="">Select customer</option>
+                    {liveCustomerNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={newTicketForm.email}
+                    onChange={handleCreateTicketChange}
+                    placeholder="customer@domain.com"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Assignee (Live)</label>
+                  <select
+                    name="assignee"
+                    value={newTicketForm.assignee}
+                    onChange={handleCreateTicketChange}
+                  >
+                    <option value="Unassigned">Unassigned</option>
+                    {liveAgentNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Department (Live)</label>
+                  <select
+                    name="department"
+                    value={newTicketForm.department}
+                    onChange={handleCreateTicketChange}
+                  >
+                    <option value="">Select department</option>
+                    {liveDepartmentNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Team (Live)</label>
+                  <select
+                    name="team"
+                    value={newTicketForm.team}
+                    onChange={handleCreateTicketChange}
+                  >
+                    <option value="">Select team</option>
+                    {liveTeamNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Priority</label>
+                  <select
+                    name="priority"
+                    value={newTicketForm.priority}
+                    onChange={handleCreateTicketChange}
+                  >
+                    <option value="Critical">Critical</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Description *</label>
+                <textarea
+                  name="description"
+                  rows={3}
+                  value={newTicketForm.description}
+                  onChange={handleCreateTicketChange}
+                  placeholder="Detailed description of the issue..."
+                  required
                 />
-              </label>
-            </div>
+              </div>
 
-            <label>
-              Description *
-              <textarea 
-                value={ticketForm.description} 
-                onChange={(event) => setTicketForm({ ...ticketForm, description: event.target.value })} 
-                placeholder="Describe the issue..." 
-                required
-              />
-            </label>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Module / Area</label>
+                  <input
+                    type="text"
+                    name="module"
+                    value={newTicketForm.module}
+                    onChange={handleCreateTicketChange}
+                    placeholder="e.g. Billing, Workspace, SSO"
+                  />
+                </div>
 
-            <label>
-              Internal notes
-              <textarea 
-                value={ticketForm.internalNotes} 
-                onChange={(event) => setTicketForm({ ...ticketForm, internalNotes: event.target.value })} 
-                placeholder="Visible to agents only" 
-              />
-            </label>
+                <div className="form-group">
+                  <label>SLA Tier</label>
+                  <select
+                    name="sla"
+                    value={newTicketForm.sla}
+                    onChange={handleCreateTicketChange}
+                  >
+                    <option value="Standard">Standard (24h)</option>
+                    <option value="Priority">Priority (4h)</option>
+                    <option value="Enterprise">Enterprise (1h)</option>
+                  </select>
+                </div>
+              </div>
 
-            <label>
-              Attachments
-              <input 
-                value={ticketForm.attachments} 
-                onChange={(event) => setTicketForm({ ...ticketForm, attachments: event.target.value })} 
-                placeholder="File names separated by commas" 
-              />
-            </label>
-
-            <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button type="button" className="primary-button" onClick={createTicket}>Create ticket <span>→</span></button>
-            </div>
+              <div className="form-actions">
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setIsCreateModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Create Ticket
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {entityModal.isOpen && (
-        <div className="modal-backdrop" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>
-          <div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '480px' }}>
-            <div className="modal-header">
-              <div>
-                <p className="overline">Quick intake</p>
-                <h2>Create {entityModal.type}</h2>
-              </div>
-              <button className="close-button" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>×</button>
+      {/* EDIT & DETAIL PROFESSIONAL DRAWER (LIVE DROPDOWNS PROPS PASSED) */}
+      {selectedTicket && (
+        <TicketDetailProfessional
+          ticket={selectedTicket}
+          onClose={() => setSelectedTicketId(null)}
+          onUpdate={updateTicket}
+          onToggleArchive={toggleArchiveTicket}
+          customers={customers}
+          agents={agents}
+          teams={teams}
+          departments={departments}
+        />
+      )}
+
+      {/* COPILOT / AI ASSISTANT DRAWER */}
+      {isAssistantOpen && (
+        <div className="copilot-drawer">
+          <div className="copilot-header">
+            <h3>Workspace Copilot</h3>
+            <button type="button" onClick={() => setIsAssistantOpen(false)}>×</button>
+          </div>
+          <div className="copilot-body">
+            <div className="copilot-logs">
+              {assistantLog.length === 0 ? (
+                <div className="copilot-empty">
+                  Ask questions like:
+                  <ul>
+                    <li>"How many critical tickets are open?"</li>
+                    <li>"Who is assigned to ticket 1042?"</li>
+                    <li>"assign ticket 1042 to Sara Davis"</li>
+                  </ul>
+                </div>
+              ) : (
+                assistantLog.map((log, idx) => (
+                  <div key={idx} className="copilot-message">
+                    <div className="copilot-q"><strong>You:</strong> {log.q}</div>
+                    <div className="copilot-a"><strong>AI:</strong> {log.a}</div>
+                  </div>
+                ))
+              )}
             </div>
-            <form onSubmit={handleSaveEntity}>
-              <div className="form-row">
-                <label style={{ width: '100%' }}>
-                  {entityModal.type} Name *
-                  <input
-                    required
-                    autoFocus
-                    value={entityModal.name}
-                    onChange={(e) => setEntityModal({ ...entityModal, name: e.target.value })}
-                    placeholder={`Enter ${entityModal.type} name...`}
-                  />
-                </label>
-              </div>
-
-              {(entityModal.type === 'Agent' || entityModal.type === 'Customer') && (
-                <div className="form-row">
-                  <label style={{ width: '100%' }}>
-                    Email Address
-                    <input
-                      type="email"
-                      value={entityModal.email}
-                      onChange={(e) => setEntityModal({ ...entityModal, email: e.target.value })}
-                      placeholder="email@example.com"
-                    />
-                  </label>
-                </div>
-              )}
-
-              {entityModal.type === 'Agent' && (
-                <div className="form-row">
-                  <label>
-                    Role
-                    <select
-                      value={entityModal.role}
-                      onChange={(e) => setEntityModal({ ...entityModal, role: e.target.value })}
-                    >
-                      <option>Support agent</option>
-                      <option>Senior Agent</option>
-                      <option>Administrator</option>
-                      <option>Manager</option>
-                    </select>
-                  </label>
-                  <label>
-                    Department
-                    <select
-                      value={entityModal.department}
-                      onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
-                    >
-                      {availableDepartments.map((dName) => (
-                        <option key={dName} value={dName}>{dName}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-
-              {entityModal.type === 'Team' && (
-                <div className="form-row">
-                  <label style={{ width: '100%' }}>
-                    Department
-                    <select
-                      value={entityModal.department}
-                      onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
-                    >
-                      {availableDepartments.map((dName) => (
-                        <option key={dName} value={dName}>{dName}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-
-              <div className="modal-actions" style={{ marginTop: '20px' }}>
-                <button type="button" className="secondary-button" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>
-                  Cancel
-                </button>
-                <button type="submit" className="primary-button">
-                  Create {entityModal.type} <span>→</span>
-                </button>
-              </div>
+            <form onSubmit={handleAssistantSubmit} className="copilot-input-form">
+              <input
+                type="text"
+                placeholder="Ask or command..."
+                value={assistantQuery}
+                onChange={(e) => setAssistantQuery(e.target.value)}
+              />
+              <button type="submit" className="btn btn-primary btn-sm">Send</button>
             </form>
           </div>
         </div>
@@ -981,423 +846,3 @@ function App() {
     </div>
   )
 }
-
-// -------------------------------------------------------------
-// SETTINGS VIEW (BUILT-IN, CONNECTED TO DATABASE & LOCALSTORAGE)
-// -------------------------------------------------------------
-function SettingsView({ tickets = [], onNotice, onActivity }) {
-  const [settings, setSettings] = useState({
-    workspaceName: 'Ticket Desk Operations',
-    supportEmail: 'support@relaydesk.io',
-    timezone: 'Asia/Karachi (UTC+05:00)',
-    dateFormat: 'DD/MM/YYYY',
-    currency: 'USD ($)',
-    defaultPriority: 'Medium',
-    defaultChannel: 'Portal',
-    criticalSlaHours: 1,
-    standardSlaHours: 12,
-    autoAssignStrategy: 'Round Robin',
-    autoCloseDays: 7,
-    slaWarningMinutes: 45,
-    emailAlerts: true,
-    soundAlerts: true,
-    customerAutoReply: true,
-    aiCommandMode: true,
-    aiAutoPriority: true,
-    aiAutoCategorize: true,
-    syncFrequency: 4,
-  })
-
-  const [activeTab, setActiveTab] = useState('general')
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveStatus, setSaveStatus] = useState('')
-  const [isTesting, setIsTesting] = useState(false)
-  const [connectionMsg, setConnectionMsg] = useState('')
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('relay:settings')
-      if (raw) {
-        setSettings((prev) => ({ ...prev, ...JSON.parse(raw) }))
-      }
-    } catch (e) {}
-  }, [])
-
-  const handleSave = (e) => {
-    if (e) e.preventDefault()
-    setIsSaving(true)
-    setSaveStatus('')
-
-    try {
-      localStorage.setItem('relay:settings', JSON.stringify(settings))
-      window.dispatchEvent(new Event('relay:settings-updated'))
-      window.dispatchEvent(new Event('relay:data-updated'))
-      if (onActivity) onActivity('Updated workspace settings and synchronized with backend')
-      if (onNotice) onNotice('Workspace settings saved and synchronized successfully.')
-      setSaveStatus('success')
-    } catch (err) {
-      setSaveStatus('error')
-    } finally {
-      setIsSaving(false)
-      setTimeout(() => setSaveStatus(''), 4000)
-    }
-  }
-
-  const testBackendConnection = async () => {
-    setIsTesting(true)
-    setConnectionMsg('Pinging backend database...')
-    const start = Date.now()
-    try {
-      await api.getTickets()
-      const ms = Date.now() - start
-      setConnectionMsg(`✓ Backend Connected! Response Latency: ${ms}ms`)
-    } catch (err) {
-      setConnectionMsg(`! Backend offline or unreachable (${err.message})`)
-    } finally {
-      setIsTesting(false)
-    }
-  }
-
-  const exportWorkspaceBackup = () => {
-    try {
-      const backupData = {
-        exportedAt: new Date().toISOString(),
-        settings,
-        ticketsCount: tickets.length,
-        tickets,
-        customers: JSON.parse(localStorage.getItem('relay:customers') || '[]'),
-        agents: JSON.parse(localStorage.getItem('relay:agents') || '[]'),
-        teams: JSON.parse(localStorage.getItem('relay:teams') || '[]'),
-        departments: JSON.parse(localStorage.getItem('relay:departments') || '[]'),
-        automations: JSON.parse(localStorage.getItem('relay:automation-rules') || '[]'),
-      }
-
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `workspace_backup_${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
-      if (onActivity) onActivity('Downloaded full workspace backup (JSON)')
-      if (onNotice) onNotice('Workspace backup JSON downloaded.')
-    } catch (err) {
-      alert('Error exporting backup: ' + err.message)
-    }
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div className="panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', padding: '20px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <p className="overline" style={{ margin: 0 }}>System Configuration</p>
-            <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>
-              ● Connected to Database
-            </span>
-          </div>
-          <h2 style={{ margin: '4px 0 6px 0' }}>Workspace & Operations Settings</h2>
-          <p style={{ margin: 0, color: 'var(--muted, #64748b)', fontSize: '0.9rem' }}>
-            Global controls for SLAs, automated routing, notifications, AI assistant, and backend synchronization.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="secondary-button" onClick={exportWorkspaceBackup}>
-            📦 Backup Workspace
-          </button>
-          <button type="button" className="primary-button" onClick={handleSave} disabled={isSaving} style={{ minWidth: '130px' }}>
-            {isSaving ? 'Saving...' : '💾 Save All Settings'}
-          </button>
-        </div>
-      </div>
-
-      {saveStatus === 'success' && (
-        <div style={{ background: '#dcfce7', color: '#15803d', padding: '12px 16px', borderRadius: '8px', fontWeight: 600 }}>
-          ✓ Settings saved and broadcasted to all pages & backend database successfully!
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border, #e2e8f0)', paddingBottom: '8px' }}>
-        {[
-          { id: 'general', label: '🏢 General & Workspace' },
-          { id: 'tickets', label: '🎫 Ticket & SLA Defaults' },
-          { id: 'notifications', label: '🔔 Alerts & Notifications' },
-          { id: 'ai', label: '🤖 AI & Automation Rules' },
-          { id: 'backend', label: '💾 Database & Maintenance' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`secondary-button ${activeTab === tab.id ? 'primary-button' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-            style={{ borderRadius: '6px', padding: '8px 16px', fontWeight: '600' }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'general' && (
-        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>Workspace Identity & Regional Preferences</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Workspace Name</label>
-              <input type="text" value={settings.workspaceName} onChange={(e) => setSettings({ ...settings, workspaceName: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Support Inbound Email</label>
-              <input type="email" value={settings.supportEmail} onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>System Timezone</label>
-              <select value={settings.timezone} onChange={(e) => setSettings({ ...settings, timezone: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value="Asia/Karachi (UTC+05:00)">Asia/Karachi (UTC+05:00)</option>
-                <option value="UTC (UTC+00:00)">UTC (UTC+00:00)</option>
-                <option value="America/New_York (UTC-05:00)">America/New_York (UTC-05:00)</option>
-                <option value="Europe/London (UTC+01:00)">Europe/London (UTC+01:00)</option>
-                <option value="Asia/Dubai (UTC+04:00)">Asia/Dubai (UTC+04:00)</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Date Format</label>
-              <select value={settings.dateFormat} onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 30/09/2026)</option>
-                <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-09-30)</option>
-                <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 09/30/2026)</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ marginTop: '24px' }}>
-            <button type="submit" className="primary-button" disabled={isSaving}>Save Workspace Settings</button>
-          </div>
-        </form>
-      )}
-
-      {activeTab === 'tickets' && (
-        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>Ticket Processing & Service Level Agreements (SLA)</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Default Ticket Priority</label>
-              <select value={settings.defaultPriority} onChange={(e) => setSettings({ ...settings, defaultPriority: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Critical SLA Target</label>
-              <select value={settings.criticalSlaHours} onChange={(e) => setSettings({ ...settings, criticalSlaHours: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value={1}>1 Hour (Urgent)</option>
-                <option value={2}>2 Hours</option>
-                <option value={4}>4 Hours</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Standard SLA Target</label>
-              <select value={settings.standardSlaHours} onChange={(e) => setSettings({ ...settings, standardSlaHours: Number(e.target.value) })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value={12}>12 Hours</option>
-                <option value={24}>24 Hours</option>
-                <option value={48}>48 Hours</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 600 }}>Auto-Assignment Strategy</label>
-              <select value={settings.autoAssignStrategy} onChange={(e) => setSettings({ ...settings, autoAssignStrategy: e.target.value })} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <option value="Round Robin">Round Robin (Equal Distribution)</option>
-                <option value="Load Balanced">Load Balanced</option>
-                <option value="Manual">Manual / Unassigned</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ marginTop: '24px' }}>
-            <button type="submit" className="primary-button" disabled={isSaving}>Save Ticket Settings</button>
-          </div>
-        </form>
-      )}
-
-      {activeTab === 'notifications' && (
-        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>Alerts & Notification Triggers</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={settings.emailAlerts} onChange={(e) => setSettings({ ...settings, emailAlerts: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <div><strong>Email Notifications for Critical Tickets</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Immediately notifies assigned managers upon critical creation</div></div>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={settings.customerAutoReply} onChange={(e) => setSettings({ ...settings, customerAutoReply: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <div><strong>Customer Auto-Reply Acknowledgment</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Sends automated receipt email with ticket ID to customer</div></div>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={settings.soundAlerts} onChange={(e) => setSettings({ ...settings, soundAlerts: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <div><strong>Real-time In-App Audio & Notice Toasts</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Plays a subtle sound when automations or commands execute</div></div>
-            </label>
-          </div>
-          <div style={{ marginTop: '24px' }}>
-            <button type="submit" className="primary-button" disabled={isSaving}>Save Notification Settings</button>
-          </div>
-        </form>
-      )}
-
-      {activeTab === 'ai' && (
-        <form onSubmit={handleSave} className="panel" style={{ padding: '24px' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>AI Command Box & Intelligent Triage</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={settings.aiCommandMode} onChange={(e) => setSettings({ ...settings, aiCommandMode: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <div><strong>AI Natural Language Command Box (Active)</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Supports natural language queries and fast entity creation</div></div>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={settings.aiAutoPriority} onChange={(e) => setSettings({ ...settings, aiAutoPriority: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <div><strong>Intelligent Priority Detection</strong><div style={{ fontSize: '0.8rem', color: '#64748b' }}>Automatically detects critical keywords like "outage" or "broken"</div></div>
-            </label>
-          </div>
-          <div style={{ marginTop: '24px' }}>
-            <button type="submit" className="primary-button" disabled={isSaving}>Save AI Settings</button>
-          </div>
-        </form>
-      )}
-
-      {activeTab === 'backend' && (
-        <div className="panel" style={{ padding: '24px' }}>
-          <h3 style={{ margin: '0 0 16px 0' }}>Database Health & Backup</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <h4 style={{ margin: '0 0 8px 0' }}>Test Backend Connection</h4>
-              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#64748b' }}>Verify live connectivity to your REST API and MySQL database.</p>
-              <button type="button" className="secondary-button" onClick={testBackendConnection} disabled={isTesting}>
-                {isTesting ? 'Testing...' : '⚡ Test Connection Now'}
-              </button>
-              {connectionMsg && (
-                <div style={{ marginTop: '10px', fontSize: '0.9rem', fontWeight: 600, color: connectionMsg.startsWith('✓') ? '#10b981' : '#ef4444' }}>
-                  {connectionMsg}
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <h4 style={{ margin: '0 0 8px 0' }}>Full Workspace Backup</h4>
-              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#64748b' }}>Download a timestamped JSON file containing all tickets, settings, and registered accounts.</p>
-              <button type="button" className="primary-button" onClick={exportWorkspaceBackup}>
-                📦 Download JSON Backup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Overview({ tickets, onOpenTickets }) {
-  const total = tickets.length
-  const open = tickets.filter((ticket) => ticket.status === 'Open').length
-  const pending = tickets.filter((ticket) => ticket.status === 'Pending').length
-  const resolved = tickets.filter((ticket) => ticket.status === 'Resolved').length
-  const critical = tickets.filter((ticket) => ticket.priority === 'Critical').length
-  const percentage = (value) => total ? `${Math.round((value / total) * 100)}%` : '0%'
-  return <>
-    <div className="metrics-grid"><Metric label="Total tickets" value={String(tickets.length)} trend="Live" tone="green" detail="in workspace" /><Metric label="Open tickets" value={String(open)} trend="Live" tone="green" detail="awaiting action" /><Metric label="Pending tickets" value={String(pending)} trend="Live" tone="green" detail="waiting on response" /><Metric label="Critical tickets" value={String(critical)} trend={critical ? 'Priority' : 'Clear'} tone={critical ? 'red' : 'green'} detail={critical ? 'needs attention' : 'no critical queue'} /></div>
-    <div className="dashboard-grid"><section className="panel volume-panel"><div className="panel-heading"><div><h2>Ticket volume</h2><p>New tickets across all channels</p></div><div className="legend"><span><i className="legend-dot dark" />Created</span><span><i className="legend-dot light" />Resolved</span></div></div><div className="chart-area"><div className="y-axis"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div className="chart"><div className="grid-lines"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 700 210" preserveAspectRatio="none" aria-label="Ticket volume chart"><path className="area" d="M0,160 C40,146 55,105 94,126 S130,93 160,112 S208,100 241,122 S277,70 310,98 S355,48 390,78 S435,61 470,93 S510,38 544,68 S590,51 620,73 S666,23 700,44 L700,210 L0,210Z" /><path className="line" d="M0,160 C40,146 55,105 94,126 S130,93 160,112 S208,100 241,122 S277,70 310,98 S355,48 390,78 S435,61 470,93 S510,38 544,68 S590,51 620,73 S666,23 700,44" /></svg><div className="x-axis"><span>Sep 01</span><span>Sep 08</span><span>Sep 15</span><span>Sep 22</span><span>Sep 30</span></div></div></div></section><section className="panel status-panel"><div className="panel-heading"><div><h2>Ticket status</h2><p>Current queue breakdown</p></div><button className="more-button">•••</button></div><div className="donut-wrap"><div className="donut" style={{ background: `conic-gradient(#e7884f 0 ${percentage(open)}, #81afd0 ${percentage(open)} ${percentage(open + pending)}, #71ba91 ${percentage(open + pending)} 100%)` }}><div><strong>{total}</strong><small>Total</small></div></div><div className="status-list"><StatusLine label="Open" value={String(open)} percent={percentage(open)} color="orange" /><StatusLine label="Pending" value={String(pending)} percent={percentage(pending)} color="blue" /><StatusLine label="Resolved" value={String(resolved)} percent={percentage(resolved)} color="green" /></div></div><button className="text-link" onClick={onOpenTickets}>View all tickets <span>→</span></button></section></div>
-    <div className="lower-grid"><section className="panel queue-panel"><div className="panel-heading"><div><h2>Needs attention</h2><p>Tickets closest to their SLA limit</p></div><button className="text-link" onClick={onOpenTickets}>View queue <span>→</span></button></div>{tickets.slice(0, 3).map((ticket) => <TicketRow ticket={ticket} key={ticket.id} />)}</section><section className="panel activity-panel"><div className="panel-heading"><div><h2>Team activity</h2><p>Recent actions from your team</p></div><button className="more-button">•••</button></div><Activity icon="✓" title="Ticket #1038 was resolved" person="Ahmed Khan" time="8 min ago" tone="green" /><Activity icon="↗" title="Ticket #1041 was assigned" person="Kiran Shah" time="24 min ago" tone="blue" /><Activity icon="+" title="New ticket #1042 was created" person="Maya Chen" time="38 min ago" tone="orange" /></section></div>
-  </>
-}
-
-function Metric({ label, value, trend, tone, detail }) { return <div className="metric-card"><div className="metric-label">{label}<span className="metric-icon">↗</span></div><div className="metric-value">{value}</div><div className={`metric-trend ${tone}`}>{tone === 'green' ? '↑' : '!' } {trend} <span>{detail}</span></div></div> }
-function StatusLine({ label, value, percent, color }) { return <div className="status-line"><span><i className={`legend-dot ${color}`} />{label}</span><strong>{value}</strong><small>{percent}</small></div> }
-function TicketRow({ ticket }) { return <div className="ticket-row"><span className={`priority-bar ${ticket.priority.toLowerCase()}`} /><span className="row-id">#{ticket.id}</span><span className="row-subject"><strong>{ticket.subject}</strong><small>{ticket.customer} · {ticket.module}</small></span><span className="sla-warning">{ticket.sla}</span><span className="avatar small">{ticket.initials}</span></div> }
-function Activity({ icon, title, person, time, tone }) { return <div className="activity"><span className={`activity-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{person} · {time}</small></span></div> }
-
-function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilter, setPriorityFilter, assigneeFilter, setAssigneeFilter, onSelect, onCreate, onToggleArchive }) { 
-  return (
-    <section className="panel ticket-list-panel">
-      <div className="ticket-toolbar">
-        <div className="search-box">
-          <span>⌕</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search or use status:open priority:high assigned:kiran" />
-          {query && (
-            <button
-              type="button"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', marginLeft: '6px' }}
-              onClick={() => setQuery('')}
-              title="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {query && (
-          <button
-            type="button"
-            className="secondary-button"
-            style={{ padding: '6px 12px', fontSize: '0.85rem', cursor: 'pointer' }}
-            onClick={() => {
-              setQuery('')
-              setFilter('All')
-              setPriorityFilter('All')
-              setAssigneeFilter('All')
-            }}
-          >
-            ← View all
-          </button>
-        )}
-
-        <div className="segmented">{['All', 'Open', 'Pending', 'Resolved'].map((item) => <button className={filter === item ? 'selected' : ''} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div>
-        <select className="filter-select" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)}><option value="All">All priorities</option><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
-        <select className="filter-select" value={assigneeFilter} onChange={(event) => setAssigneeFilter(event.target.value)}><option value="All">All assignees</option>{['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Unassigned'].map((name) => <option key={name}>{name}</option>)}</select>
-        <button className="primary-button" onClick={onCreate}>+ New ticket</button>
-      </div>
-      <div className="query-hint">Combine filters with spaces. Example: <code>status:open priority:high assigned:kiran</code></div>
-      <div className="table-header"><span>Ticket</span><span>Priority</span><span>Status</span><span>Ownership</span><span>Updated / Action</span></div>
-      {tickets.map((ticket) => (
-        <div className="table-row table-row-button" key={ticket.id} onClick={() => onSelect(ticket.id)} style={{ cursor: 'pointer', display: 'grid', alignItems: 'center' }}>
-          <div className="ticket-cell"><span className="avatar">{ticket.initials}</span><span><strong>#{ticket.id} {ticket.subject}</strong><small>{ticket.customer} · {ticket.email} · {ticket.category}</small></span></div>
-          <span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span>
-          <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
-          <span className="assignee"><strong>{ticket.assignee}</strong><small>{ticket.team} · {ticket.department}</small></span>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span className="created">{ticket.updatedDate}<small>{ticket.tags.join(' · ')}</small></span>
-            <button
-              type="button"
-              className="secondary-button"
-              style={{
-                padding: '4px 8px',
-                fontSize: '0.75rem',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                background: ticket.archived ? '#fef3c7' : '#f1f5f9',
-                color: ticket.archived ? '#b45309' : '#475569',
-                border: '1px solid #cbd5e1'
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleArchive(ticket.id)
-              }}
-              title={ticket.archived ? 'Restore to active list' : 'Move to archive'}
-            >
-              {ticket.archived ? '📂 Unarchive' : '📦 Archive'}
-            </button>
-          </div>
-        </div>
-      ))}
-      {tickets.length === 0 && <div className="empty-state">No tickets match this view.</div>}
-    </section>
-  ) 
-}
-
-function TicketDetail({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'] }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Assignee</small><strong>{ticket.assignee}</strong><span>{ticket.department}</span></div><div><small>SLA due</small><strong>{ticket.sla}</strong><span>{ticket.dueDate}</span></div><div><small>Module</small><strong>{ticket.module}</strong><span>{ticket.tags.join(' · ')}</span></div></div><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an internal note or customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section></aside></div> }
-function TicketDetailAdvanced({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'], updatedDate: new Date().toLocaleString() }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Ticket ID</small><strong>#{ticket.id}</strong><span>Created: {ticket.createdDate}</span></div><div><small>Module / category</small><strong>{ticket.module}</strong><span>{ticket.category}</span></div><div><small>Ownership</small><strong>{ticket.assignee}</strong><span>{ticket.team} · {ticket.department}</span></div><div><small>Due date / SLA</small><strong>{ticket.dueDate}</strong><span>{ticket.sla}</span></div><div><small>Updated</small><strong>{ticket.updatedDate}</strong><span>{ticket.tags.join(' · ') || 'No tags'}</span></div></div><section className="drawer-section"><h3>Attachments</h3>{ticket.attachments.length ? ticket.attachments.map((file) => <div className="attachment-item" key={file}>📎 {file}</div>) : <p className="muted-copy">No attachments added.</p>}</section><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section><section className="drawer-section"><h3>Internal notes</h3>{ticket.internalNotes.length ? ticket.internalNotes.map((item, index) => <div className="comment-item internal-note" key={`${item}-${index}`}>{item}<small>Visible to agents only</small></div>) : <p className="muted-copy">No internal notes added.</p>}</section><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section></aside></div> }
-function Automation({ onNotice }) { const rules = [{ name: 'Escalate critical tickets', trigger: 'Priority is Critical', action: 'Assign to Support Manager + notify', status: 'Active', runs: '18 runs' }, { name: 'SLA risk alert', trigger: 'Less than 60 minutes remaining', action: 'Notify assignee + manager', status: 'Active', runs: '42 runs' }, { name: 'Close resolved tickets', trigger: 'Status is Resolved for 7 days', action: 'Archive ticket', status: 'Paused', runs: '8 runs' }]; return <div className="automation-layout"><div className="automation-intro"><p className="overline">Operations engine</p><h2>Rules that keep work moving.</h2><p>Build trigger, condition, and action flows that handle the repetitive work before it reaches your team.</p><button className="primary-button" onClick={() => onNotice('Rule builder opened. Connect a trigger to begin.')}>+ Create automation</button></div><div className="rule-list">{rules.map((rule) => <div className="rule-card" key={rule.name}><div className="rule-top"><span className={`rule-status ${rule.status.toLowerCase()}`} /> <strong>{rule.name}</strong><button className="more-button">•••</button></div><div className="rule-flow"><span><small>WHEN</small>{rule.trigger}</span><b>→</b><span><small>THEN</small>{rule.action}</span></div><div className="rule-footer"><span className={`pill ${rule.status.toLowerCase()}`}>{rule.status}</span><small>{rule.runs} this month</small></div></div>)}</div></div> }
-function People() { const people = [{ name: 'Kiran Shah', role: 'Administrator', team: 'Leadership', load: '8 tickets', initials: 'KS' }, { name: 'Ahmed Khan', role: 'Support agent', team: 'Core support', load: '12 tickets', initials: 'AK' }, { name: 'Sara Davis', role: 'Support agent', team: 'Enterprise', load: '7 tickets', initials: 'SD' }, { name: 'Maya Patel', role: 'Manager', team: 'Leadership', load: '4 tickets', initials: 'MP' }]; return <section className="panel people-panel"><div className="panel-heading"><div><h2>People & permissions</h2><p>Manage access, teams, and workload across the workspace.</p></div><button className="primary-button">+ Invite member</button></div><div className="people-grid">{people.map((person) => <div className="person-card" key={person.name}><span className="avatar large">{person.initials}</span><strong>{person.name}</strong><span>{person.role}</span><small>{person.team} · {person.load}</small><button>Manage access <span>→</span></button></div>)}</div></section> }
-function Reports() { return <div className="reports-layout"><section className="panel report-feature"><p className="overline">Monthly service report</p><h2>September was your fastest month yet.</h2><p>Resolution time fell by 16% while customer satisfaction held steady at <strong>4.8/5</strong>.</p><div className="report-bars"><span style={{ height: '42%' }} /><span style={{ height: '58%' }} /><span style={{ height: '50%' }} /><span style={{ height: '72%' }} /><span style={{ height: '66%' }} /><span style={{ height: '90%' }} /><span style={{ height: '82%' }} /></div><div className="bar-labels"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></section><div className="report-side"><Metric label="CSAT score" value="4.8/5" trend="4.1%" tone="green" detail="above target" /><Metric label="Tickets resolved" value="186" trend="16.8%" tone="green" detail="vs. previous period" /><button className="export-button">↓ Export full report <span>PDF · CSV · XLSX</span></button></div></div> }
-function ManagementPlaceholder({ title }) { return <section className="panel management-placeholder"><div className="placeholder-icon">✦</div><p className="overline">Workspace module</p><h2>{title}</h2><p>This section is route-ready and prepared for its dedicated workflow. Existing ticket operations remain available from the Tickets section.</p><span className="pill active">Coming next</span></section> }
-
-export default App

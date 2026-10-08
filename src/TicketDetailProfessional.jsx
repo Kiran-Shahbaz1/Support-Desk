@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import api from './api'
 import TicketCommunication from './TicketCommunication'
 
-const AGENT_OPTIONS = ['Unassigned', 'Kiran Shah', 'Ahmed Khan', 'Sara Davis']
 const PRIORITY_OPTIONS = ['Critical', 'High', 'Medium', 'Low']
 const SLA_OPTIONS = ['Standard', 'Priority', 'Enterprise', 'Custom']
 const STATUS_OPTIONS = ['Open', 'Pending', 'Resolved']
@@ -24,17 +23,31 @@ const toFormValues = (ticket = {}) => ({
   tags: (ticket.tags || []).join(', '),
 })
 
-export default function TicketDetailProfessional({ ticket, onClose, onUpdate }) {
+export default function TicketDetailProfessional({ 
+  ticket, 
+  onClose, 
+  onUpdate, 
+  onToggleArchive,
+  customers = [],
+  agents = [],
+  teams = [],
+  departments = []
+}) {
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState(() => toFormValues(ticket))
   const [formError, setFormError] = useState('')
 
-  // Jab naya ticket khule to form initialize ho, lekin editing ke dauran overwrite na ho
+  // LIVE DROPDOWNS: Direct mapping from live state (agar delete hua toh list se remove ho jayega)
+  const customerList = customers.map(c => typeof c === 'string' ? c : c.name).filter(Boolean)
+  const agentList = ['Unassigned', ...agents.map(a => typeof a === 'string' ? a : a.name).filter(Boolean)]
+  const departmentList = departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
+  const teamList = teams.map(t => typeof t === 'string' ? t : t.name).filter(Boolean)
+
   useEffect(() => {
     if (!isEditing) {
       setForm(toFormValues(ticket))
     }
-  }, [ticket?.id])
+  }, [ticket?.id, isEditing])
 
   const updateField = (event) => {
     const { name, value } = event.target
@@ -93,389 +106,271 @@ export default function TicketDetailProfessional({ ticket, onClose, onUpdate }) 
 
   const deleteTicket = () => {
     if (!window.confirm(`Delete ticket #${ticket.id}? This cannot be undone.`)) return
-    onUpdate(ticket.id, { removeTicket: true }, `Ticket #${ticket.id} deleted`)
+    onUpdate(ticket.id, null, `Ticket #${ticket.id} deleted`)
+    onClose()
   }
-
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    try {
-      await api.uploadAttachment(ticket.id, {
-        fileName: file.name,
-        sizeBytes: file.size,
-        contentType: file.type || 'application/octet-stream',
-      })
-    } catch (e) {
-      console.warn('API attachment upload warning:', e)
-    }
-    const nextAttachments = [...(ticket.attachments || []), file.name]
-    onUpdate(
-      ticket.id,
-      {
-        attachments: nextAttachments,
-        history: [...(ticket.history || []), `Attached file ${file.name}`],
-      },
-      `Attached ${file.name} to ticket #${ticket.id}`
-    )
-  }
-
-  const attachments = ticket.attachments || []
-  const tagsList = ticket.tags || []
 
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}>
-        <div className="drawer-header">
-          <div>
-            <p className="overline">Ticket #{ticket.id}</p>
-            <h2>{ticket.subject}</h2>
+    <div className="ticket-detail-overlay" onClick={onClose}>
+      <div className="ticket-detail-drawer" onClick={(e) => e.stopPropagation()}>
+        {/* Drawer Header */}
+        <div className="ticket-detail-header">
+          <div className="ticket-detail-title-row">
+            <span className="ticket-badge-id">#{ticket.id}</span>
+            <span className={`status-pill status-${(ticket.status || 'open').toLowerCase()}`}>
+              {ticket.status}
+            </span>
+            <span className={`priority-pill priority-${(ticket.priority || 'medium').toLowerCase()}`}>
+              {ticket.priority}
+            </span>
+            {ticket.archived && <span className="archived-tag">Archived</span>}
           </div>
-          <div className="drawer-header-actions">
-            {!isEditing && (
-              <>
-                <button
-                  className="secondary-button"
-                  onClick={() => {
-                    setForm(toFormValues(ticket))
-                    setFormError('')
-                    setIsEditing(true)
-                  }}
-                >
-                  Edit ticket
-                </button>
-                <button className="danger-button" onClick={deleteTicket}>
-                  Delete
-                </button>
-              </>
+          <div className="ticket-detail-actions">
+            {onToggleArchive && (
+              <button 
+                type="button" 
+                className="btn btn-secondary btn-sm"
+                onClick={() => onToggleArchive(ticket.id)}
+              >
+                {ticket.archived ? 'Unarchive' : 'Archive'}
+              </button>
             )}
-            <button className="close-button" onClick={onClose} aria-label="Close ticket">
+            <button 
+              type="button" 
+              className="btn btn-secondary btn-sm" 
+              onClick={() => setIsEditing(!isEditing)}
+            >
+              {isEditing ? 'Cancel Edit' : 'Edit Ticket'}
+            </button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={deleteTicket}>
+              Delete
+            </button>
+            <button type="button" className="close-btn" onClick={onClose} aria-label="Close">
               ×
             </button>
           </div>
         </div>
 
-        {isEditing ? (
-          <form className="ticket-edit-form" onSubmit={saveEdit}>
-            {formError && (
-              <div className="form-error" role="alert">
-                ! {formError}
-              </div>
-            )}
-            <div className="ticket-edit-grid">
-              <label>
-                Subject
+        {/* Drawer Body */}
+        <div className="ticket-detail-body">
+          {formError && <div className="form-error-banner">{formError}</div>}
+
+          {isEditing ? (
+            /* EDIT FORM WITH STRICT LIVE DROPDOWNS */
+            <form onSubmit={saveEdit} className="ticket-edit-form">
+              <div className="form-group">
+                <label>Subject *</label>
                 <input
+                  type="text"
                   name="subject"
                   value={form.subject}
                   onChange={updateField}
-                  placeholder="Short issue summary"
                   required
                 />
-              </label>
+              </div>
 
-              <label>
-                Customer
-                <input
-                  name="customer"
-                  value={form.customer}
-                  onChange={updateField}
-                  placeholder="Customer name"
-                  required
-                />
-              </label>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Customer * (Live)</label>
+                  <select name="customer" value={form.customer} onChange={updateField} required>
+                    <option value="">Select customer</option>
+                    {customerList.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    {/* Fallback only if ticket already had a customer not in list */}
+                    {form.customer && !customerList.includes(form.customer) && (
+                      <option value={form.customer}>{form.customer}</option>
+                    )}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Customer Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={updateField}
+                    placeholder="customer@domain.com"
+                  />
+                </div>
+              </div>
 
-              <label>
-                Customer email
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={updateField}
-                  placeholder="customer@example.com"
-                />
-              </label>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Assignee (Live)</label>
+                  <select name="assignee" value={form.assignee} onChange={updateField}>
+                    {agentList.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                    {form.assignee && !agentList.includes(form.assignee) && (
+                      <option value={form.assignee}>{form.assignee}</option>
+                    )}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Department (Live)</label>
+                  <select name="department" value={form.department} onChange={updateField}>
+                    <option value="">Select department</option>
+                    {departmentList.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                    {form.department && !departmentList.includes(form.department) && (
+                      <option value={form.department}>{form.department}</option>
+                    )}
+                  </select>
+                </div>
+              </div>
 
-              <label>
-                Module
-                <input
-                  name="module"
-                  value={form.module}
-                  onChange={updateField}
-                  placeholder="Billing, Account..."
-                />
-              </label>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Team (Live)</label>
+                  <select name="team" value={form.team} onChange={updateField}>
+                    <option value="">Select team</option>
+                    {teamList.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                    {form.team && !teamList.includes(form.team) && (
+                      <option value={form.team}>{form.team}</option>
+                    )}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Priority</label>
+                  <select name="priority" value={form.priority} onChange={updateField}>
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-              <label>
-                Category
-                <input
-                  name="category"
-                  value={form.category}
-                  onChange={updateField}
-                  placeholder="Incident, question..."
-                />
-              </label>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Status</label>
+                  <select name="status" value={form.status} onChange={updateField}>
+                    {STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>SLA Tier</label>
+                  <select name="sla" value={form.sla} onChange={updateField}>
+                    {SLA_OPTIONS.map((sla) => (
+                      <option key={sla} value={sla}>{sla}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-              {/* Status Dropdown */}
-              <label>
-                Status
-                <select name="status" value={form.status} onChange={updateField}>
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {/* Priority Dropdown */}
-              <label>
-                Priority
-                <select name="priority" value={form.priority} onChange={updateField}>
-                  {PRIORITY_OPTIONS.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              {/* Assigned Agent Dropdown */}
-              <label>
-                Assigned agent
-                <select name="assignee" value={form.assignee} onChange={updateField}>
-                  {AGENT_OPTIONS.map((agent) => (
-                    <option key={agent} value={agent}>
-                      {agent}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Department
-                <input
-                  name="department"
-                  value={form.department}
-                  onChange={updateField}
-                  placeholder="Department name"
-                />
-              </label>
-
-              <label>
-                Team
-                <input
-                  name="team"
-                  value={form.team}
-                  onChange={updateField}
-                  placeholder="Team name"
-                />
-              </label>
-
-              {/* Due Date (datetime-local matching Create form) */}
-              <label>
-                Due date
-                <input
-                  type="datetime-local"
-                  name="dueDate"
-                  value={form.dueDate}
-                  onChange={updateField}
-                />
-              </label>
-
-              {/* SLA Dropdown */}
-              <label>
-                SLA
-                <select name="sla" value={form.sla} onChange={updateField}>
-                  {SLA_OPTIONS.map((sla) => (
-                    <option key={sla} value={sla}>
-                      {sla}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="ticket-edit-wide">
-                Tags
-                <input
-                  name="tags"
-                  value={form.tags}
-                  onChange={updateField}
-                  placeholder="billing, urgent"
-                />
-              </label>
-
-              <label className="ticket-edit-wide">
-                Description
+              <div className="form-group">
+                <label>Description *</label>
                 <textarea
                   name="description"
                   rows={4}
                   value={form.description}
                   onChange={updateField}
-                  placeholder="Describe the issue..."
                   required
                 />
-              </label>
-            </div>
+              </div>
 
-            <div className="ticket-edit-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setForm(toFormValues(ticket))
-                  setFormError('')
-                  setIsEditing(false)
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="primary-button">
-                Save changes
-              </button>
-            </div>
-          </form>
-        ) : (
-          <>
-            <div className="drawer-badges">
-              <span className={`pill ${(ticket.status || '').toLowerCase()}`}>{ticket.status}</span>
-              <span className={`priority ${(ticket.priority || '').toLowerCase()}`}>
-                {ticket.priority} priority
-              </span>
-              <span className="channel-badge">{ticket.channel}</span>
-            </div>
-            <p className="drawer-description">{ticket.description}</p>
-            <div className="detail-grid">
-              <div>
-                <small>Customer</small>
-                <strong>{ticket.customer}</strong>
-                <span>{ticket.email}</span>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Module / Area</label>
+                  <input
+                    type="text"
+                    name="module"
+                    value={form.module}
+                    onChange={updateField}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Due Date</label>
+                  <input
+                    type="text"
+                    name="dueDate"
+                    value={form.dueDate}
+                    onChange={updateField}
+                    placeholder="e.g. Tomorrow, 5:00 PM"
+                  />
+                </div>
               </div>
-              <div>
-                <small>Ticket ID</small>
-                <strong>#{ticket.id}</strong>
-                <span>Created: {ticket.createdDate}</span>
+
+              <div className="form-group">
+                <label>Tags (comma separated)</label>
+                <input
+                  type="text"
+                  name="tags"
+                  value={form.tags}
+                  onChange={updateField}
+                  placeholder="Billing, Urgent, UI"
+                />
               </div>
-              <div>
-                <small>Module / category</small>
-                <strong>{ticket.module}</strong>
-                <span>{ticket.category}</span>
+
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setIsEditing(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
               </div>
-              <div>
-                <small>Ownership</small>
-                <strong>{ticket.assignee}</strong>
-                <span>
-                  {ticket.team} · {ticket.department}
-                </span>
+            </form>
+          ) : (
+            /* VIEW DETAILS MODE */
+            <div className="ticket-view-details">
+              <h2 className="ticket-view-subject">{ticket.subject}</h2>
+              <p className="ticket-view-desc">{ticket.description}</p>
+
+              <div className="ticket-metadata-grid">
+                <div className="meta-card">
+                  <div className="meta-label">Customer</div>
+                  <div className="meta-val">{ticket.customer}</div>
+                  <div className="meta-sub">{ticket.email || 'No email'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-label">Assignee</div>
+                  <div className="meta-val">{ticket.assignee || 'Unassigned'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-label">Department</div>
+                  <div className="meta-val">{ticket.department || 'General'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-label">Team</div>
+                  <div className="meta-val">{ticket.team || 'Support'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-label">Module</div>
+                  <div className="meta-val">{ticket.module || 'Core'}</div>
+                </div>
+                <div className="meta-card">
+                  <div className="meta-label">SLA</div>
+                  <div className="meta-val">{ticket.sla || 'Standard'}</div>
+                </div>
               </div>
-              <div>
-                <small>Due date / SLA</small>
-                <strong>{ticket.dueDate}</strong>
-                <span>{ticket.sla}</span>
-              </div>
-              <div>
-                <small>Updated</small>
-                <strong>{ticket.updatedDate}</strong>
-                <span>{tagsList.join(' · ') || 'No tags'}</span>
-              </div>
-            </div>
-            <section className="drawer-section">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '8px',
-                }}
-              >
-                <h3 style={{ margin: 0 }}>Attachments ({attachments.length})</h3>
-                <label
-                  className="secondary-button"
-                  style={{ cursor: 'pointer', padding: '4px 10px', fontSize: '0.85rem' }}
-                >
-                  📎 Add file
-                  <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
-                </label>
-              </div>
-              {attachments.length ? (
-                attachments.map((file) => (
-                  <div
-                    className="attachment-item"
-                    key={file}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <span>📄 {file}</span>
-                    <button
-                      type="button"
-                      className="text-button"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#3b82f6',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
-                      }}
-                      onClick={() => alert(`Attachment "${file}" is saved in MySQL storage.`)}
-                    >
-                      Download
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="muted-copy">No attachments added. Click “Add file” above to attach documents.</p>
+
+              {ticket.tags && ticket.tags.length > 0 && (
+                <div className="ticket-tags-section">
+                  <span className="tags-label">Tags:</span>
+                  {ticket.tags.map((t, idx) => (
+                    <span key={idx} className="tag-chip">{t}</span>
+                  ))}
+                </div>
               )}
-            </section>
-            <div className="drawer-controls">
-              <label>
-                Status
-                <select
-                  value={ticket.status}
-                  onChange={(event) =>
-                    onUpdate(
-                      ticket.id,
-                      {
-                        status: event.target.value,
-                        sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla,
-                        updatedDate: new Date().toLocaleString(),
-                      },
-                      `Ticket #${ticket.id} status changed to ${event.target.value}`
-                    )
-                  }
-                >
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Priority
-                <select
-                  value={ticket.priority}
-                  onChange={(event) =>
-                    onUpdate(
-                      ticket.id,
-                      {
-                        priority: event.target.value,
-                        updatedDate: new Date().toLocaleString(),
-                      },
-                      `Ticket #${ticket.id} priority changed to ${event.target.value}`
-                    )
-                  }
-                >
-                  {PRIORITY_OPTIONS.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </>
-        )}
 
-        <TicketCommunication ticket={ticket} onUpdate={onUpdate} />
-      </aside>
+              {/* Communication / Comments component */}
+              <TicketCommunication 
+                ticket={ticket} 
+                onAddComment={(newComment) => {
+                  const updatedComments = [...(ticket.comments || []), newComment]
+                  onUpdate(ticket.id, { comments: updatedComments }, 'Added comment')
+                }} 
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
