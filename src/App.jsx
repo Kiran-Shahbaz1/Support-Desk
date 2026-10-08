@@ -14,17 +14,17 @@ import { commandHelp, parseWorkspaceCommand } from './workspaceCommand'
 import { applyWorkspaceCommand } from './workspaceCommandActions'
 
 const initialTickets = [
-  { id: 1042, subject: 'Invoice export returns a blank PDF', customer: 'Maya Chen', initials: 'MC', email: 'maya.chen@acme.co', description: 'The finance team receives a blank PDF when exporting the monthly invoice report.', module: 'Billing', department: 'Finance support', channel: 'Email', priority: 'Critical', status: 'Open', assignee: 'Kiran Shah', sla: '00:42 left', created: '12 min ago', dueDate: 'Today, 9:30 PM', tag: 'SLA risk', tags: ['SLA risk', 'Invoice'], comments: [], history: ['Ticket created via email', 'Priority raised to Critical'] },
-  { id: 1041, subject: 'Cannot invite a new workspace member', customer: 'Theo Martin', initials: 'TM', email: 'theo.martin@northwind.io', description: 'The invite button spins indefinitely for a new workspace member.', module: 'Workspace', department: 'Core support', channel: 'Chat', priority: 'High', status: 'Pending', assignee: 'Ahmed Khan', sla: '02:18 left', created: '38 min ago', dueDate: 'Today, 11:00 PM', tag: 'Waiting on customer', tags: ['Invite', 'Workspace'], comments: ['Requested a screen recording from the customer.'], history: ['Ticket created via chat', 'Assigned to Ahmed Khan'] },
-  { id: 1040, subject: 'SSO setup questions for the finance team', customer: 'Priya Nair', initials: 'PN', email: 'priya.nair@contoso.com', description: 'Customer needs guidance for configuring SAML metadata and role mapping.', module: 'Security', department: 'Enterprise', channel: 'Email', priority: 'Medium', status: 'Open', assignee: 'Sara Davis', sla: '05:40 left', created: '1 hr ago', dueDate: 'Tomorrow, 10:00 AM', tag: 'Enterprise', tags: ['SSO', 'Enterprise'], comments: [], history: ['Ticket created via email'] },
-  { id: 1039, subject: 'Dashboard data is delayed by one hour', customer: 'Jon Bell', initials: 'JB', email: 'jon.bell@globex.com', description: 'Analytics dashboard is showing data from the previous hour.', module: 'Analytics', department: 'Data support', channel: 'API', priority: 'High', status: 'Open', assignee: 'Kiran Shah', sla: '03:11 left', created: '2 hrs ago', dueDate: 'Today, 10:15 PM', tag: 'Data', tags: ['Analytics', 'Incident'], comments: [], history: ['Ticket created via API', 'Tagged as Incident'] },
-  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'] },
+  { id: 1042, subject: 'Invoice export returns a blank PDF', customer: 'Maya Chen', initials: 'MC', email: 'maya.chen@acme.co', description: 'The finance team receives a blank PDF when exporting the monthly invoice report.', module: 'Billing', department: 'Finance support', channel: 'Email', priority: 'Critical', status: 'Open', assignee: 'Kiran Shah', sla: '00:42 left', created: '12 min ago', dueDate: 'Today, 9:30 PM', tag: 'SLA risk', tags: ['SLA risk', 'Invoice'], comments: [], history: ['Ticket created via email', 'Priority raised to Critical'], archived: false },
+  { id: 1041, subject: 'Cannot invite a new workspace member', customer: 'Theo Martin', initials: 'TM', email: 'theo.martin@northwind.io', description: 'The invite button spins indefinitely for a new workspace member.', module: 'Workspace', department: 'Core support', channel: 'Chat', priority: 'High', status: 'Pending', assignee: 'Ahmed Khan', sla: '02:18 left', created: '38 min ago', dueDate: 'Today, 11:00 PM', tag: 'Waiting on customer', tags: ['Invite', 'Workspace'], comments: ['Requested a screen recording from the customer.'], history: ['Ticket created via chat', 'Assigned to Ahmed Khan'], archived: false },
+  { id: 1040, subject: 'SSO setup questions for the finance team', customer: 'Priya Nair', initials: 'PN', email: 'priya.nair@contoso.com', description: 'Customer needs guidance for configuring SAML metadata and role mapping.', module: 'Security', department: 'Enterprise', channel: 'Email', priority: 'Medium', status: 'Open', assignee: 'Sara Davis', sla: '05:40 left', created: '1 hr ago', dueDate: 'Tomorrow, 10:00 AM', tag: 'Enterprise', tags: ['SSO', 'Enterprise'], comments: [], history: ['Ticket created via email'], archived: false },
+  { id: 1039, subject: 'Dashboard data is delayed by one hour', customer: 'Jon Bell', initials: 'JB', email: 'jon.bell@globex.com', description: 'Analytics dashboard is showing data from the previous hour.', module: 'Analytics', department: 'Data support', channel: 'API', priority: 'High', status: 'Open', assignee: 'Kiran Shah', sla: '03:11 left', created: '2 hrs ago', dueDate: 'Today, 10:15 PM', tag: 'Data', tags: ['Analytics', 'Incident'], comments: [], history: ['Ticket created via API', 'Tagged as Incident'], archived: false },
+  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'], archived: true },
 ]
 
 const normalizeCommunication = (entry, visibility, index) => typeof entry === 'string' ? { id: `${visibility}-${index}-${entry}`, body: entry, author: 'Workspace administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), edited: false, mentions: [...new Set(entry.match(/@[a-z0-9_.-]+/gi) || [])], visibility } : { visibility, edited: false, mentions: [], ...entry }
 
 const enrichTicket = (ticket) => {
-  const enriched = { email: 'customer@example.com', description: 'No description provided.', module: 'General', category: 'General inquiry', department: 'Core support', team: 'Core support', channel: 'Web form', dueDate: 'Not scheduled', createdDate: ticket.created || 'Not recorded', updatedDate: ticket.created || 'Not recorded', sla: 'Not assigned', tags: ticket.tag ? [ticket.tag] : [], attachments: [], comments: [], internalNotes: [], history: [], ...ticket }
+  const enriched = { email: 'customer@example.com', description: 'No description provided.', module: 'General', category: 'General inquiry', department: 'Core support', team: 'Core support', channel: 'Web form', dueDate: 'Not scheduled', createdDate: ticket.created || 'Not recorded', updatedDate: ticket.created || 'Not recorded', sla: 'Not assigned', tags: ticket.tag ? [ticket.tag] : [], attachments: [], comments: [], internalNotes: [], history: [], archived: Boolean(ticket.archived), ...ticket }
   return { ...enriched, comments: (enriched.comments || []).map((entry, index) => normalizeCommunication(entry, 'public', index)), internalNotes: (enriched.internalNotes || []).map((entry, index) => normalizeCommunication(entry, 'internal', index)) }
 }
 
@@ -53,7 +53,7 @@ const navigationGroups = [
 const navigationItems = navigationGroups.flatMap((group) => group.items)
 
 function downloadTicketReport(tickets) {
-  const rows = [['Ticket ID', 'Subject', 'Customer', 'Status', 'Priority', 'Assignee', 'Department'], ...tickets.map((ticket) => [ticket.id, ticket.subject, ticket.customer, ticket.status, ticket.priority, ticket.assignee, ticket.department])]
+  const rows = [['Ticket ID', 'Subject', 'Customer', 'Status', 'Priority', 'Assignee', 'Department', 'Archived'], ...tickets.map((ticket) => [ticket.id, ticket.subject, ticket.customer, ticket.status, ticket.priority, ticket.assignee, ticket.department, ticket.archived ? 'Yes' : 'No'])]
   const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n')
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const link = document.createElement('a')
@@ -266,6 +266,17 @@ function App() {
     window.dispatchEvent(new Event('relay:data-updated'))
   }
 
+  const toggleArchiveTicket = (ticketId) => {
+    const target = tickets.find((t) => t.id === ticketId)
+    if (!target) return
+    const isNowArchived = !target.archived
+    updateTicket(
+      ticketId,
+      { archived: isNowArchived },
+      isNowArchived ? `Ticket #${ticketId} moved to archive` : `Ticket #${ticketId} restored from archive`
+    )
+  }
+
   const handleSaveEntity = async (e) => {
     e.preventDefault()
     if (!entityModal.name.trim()) return
@@ -399,6 +410,7 @@ function App() {
       dueDate: ticketForm.dueDate || '',
       sla: ticketForm.sla,
       attachments,
+      archived: false,
     }
 
     try {
@@ -495,8 +507,8 @@ function App() {
           <div className="heading-row">
             <div>
               <p className="overline">
-  {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-</p>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
               <h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1>
               <p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p>
             </div>
@@ -531,8 +543,39 @@ function App() {
 
           {notice && <div className={`notice notice-${noticeTone}`}><span>{noticeTone === 'success' ? '✓' : '!'}</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
           {activeView === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => navigate('/tickets')} />}
-          {activeView === 'Tickets' && <label className="archived-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived ({tickets.filter((ticket) => ticket.archived).length})</label>}
-          {activeView === 'Tickets' && <TicketView tickets={filteredTickets} query={query} setQuery={setQuery} filter={filter} setFilter={setFilter} priorityFilter={priorityFilter} setPriorityFilter={setPriorityFilter} assigneeFilter={assigneeFilter} setAssigneeFilter={setAssigneeFilter} onSelect={setSelectedTicketId} onCreate={() => navigate('/tickets/new')} />}
+          
+          {/* Live Interactive Archive Toggle */}
+          {activeView === 'Tickets' && (
+            <label className="archived-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '10px 0', fontWeight: '600' }}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(event) => {
+                  setShowArchived(event.target.checked)
+                  setNotice(event.target.checked ? 'Showing active and archived tickets' : 'Showing active tickets only')
+                }}
+              />
+              Show archived ({tickets.filter((ticket) => ticket.archived).length})
+            </label>
+          )}
+
+          {activeView === 'Tickets' && (
+            <TicketView
+              tickets={filteredTickets}
+              query={query}
+              setQuery={setQuery}
+              filter={filter}
+              setFilter={setFilter}
+              priorityFilter={priorityFilter}
+              setPriorityFilter={setPriorityFilter}
+              assigneeFilter={assigneeFilter}
+              setAssigneeFilter={setAssigneeFilter}
+              onSelect={setSelectedTicketId}
+              onCreate={() => navigate('/tickets/new')}
+              onToggleArchive={toggleArchiveTicket}
+            />
+          )}
+
           {activeView === 'Automation' && <AutomationPage rules={automationRules} setRules={setAutomationRules} onActivity={recordManagementActivity} onRunRules={runAutomationNow} />}
           
           {/* Real-time Connected Reports Page */}
@@ -550,7 +593,7 @@ function App() {
             />
           )}
 
-          {/* Dedicated Professional Settings Page (Built-in, zero import errors) */}
+          {/* Dedicated Professional Settings Page */}
           {activeView === 'Settings' && (
             <SettingsView
               tickets={tickets}
@@ -1000,7 +1043,7 @@ function StatusLine({ label, value, percent, color }) { return <div className="s
 function TicketRow({ ticket }) { return <div className="ticket-row"><span className={`priority-bar ${ticket.priority.toLowerCase()}`} /><span className="row-id">#{ticket.id}</span><span className="row-subject"><strong>{ticket.subject}</strong><small>{ticket.customer} · {ticket.module}</small></span><span className="sla-warning">{ticket.sla}</span><span className="avatar small">{ticket.initials}</span></div> }
 function Activity({ icon, title, person, time, tone }) { return <div className="activity"><span className={`activity-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{person} · {time}</small></span></div> }
 
-function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilter, setPriorityFilter, assigneeFilter, setAssigneeFilter, onSelect, onCreate }) { 
+function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilter, setPriorityFilter, assigneeFilter, setAssigneeFilter, onSelect, onCreate, onToggleArchive }) { 
   return (
     <section className="panel ticket-list-panel">
       <div className="ticket-toolbar">
@@ -1041,15 +1084,38 @@ function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilte
         <button className="primary-button" onClick={onCreate}>+ New ticket</button>
       </div>
       <div className="query-hint">Combine filters with spaces. Example: <code>status:open priority:high assigned:kiran</code></div>
-      <div className="table-header"><span>Ticket</span><span>Priority</span><span>Status</span><span>Ownership</span><span>Updated</span></div>
+      <div className="table-header"><span>Ticket</span><span>Priority</span><span>Status</span><span>Ownership</span><span>Updated / Action</span></div>
       {tickets.map((ticket) => (
-        <button className="table-row table-row-button" key={ticket.id} onClick={() => onSelect(ticket.id)}>
+        <div className="table-row table-row-button" key={ticket.id} onClick={() => onSelect(ticket.id)} style={{ cursor: 'pointer', display: 'grid', alignItems: 'center' }}>
           <div className="ticket-cell"><span className="avatar">{ticket.initials}</span><span><strong>#{ticket.id} {ticket.subject}</strong><small>{ticket.customer} · {ticket.email} · {ticket.category}</small></span></div>
           <span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span>
           <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
           <span className="assignee"><strong>{ticket.assignee}</strong><small>{ticket.team} · {ticket.department}</small></span>
-          <span className="created">{ticket.updatedDate}<small>{ticket.tags.join(' · ')}</small></span>
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span className="created">{ticket.updatedDate}<small>{ticket.tags.join(' · ')}</small></span>
+            <button
+              type="button"
+              className="secondary-button"
+              style={{
+                padding: '4px 8px',
+                fontSize: '0.75rem',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                background: ticket.archived ? '#fef3c7' : '#f1f5f9',
+                color: ticket.archived ? '#b45309' : '#475569',
+                border: '1px solid #cbd5e1'
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleArchive(ticket.id)
+              }}
+              title={ticket.archived ? 'Restore to active list' : 'Move to archive'}
+            >
+              {ticket.archived ? '📂 Unarchive' : '📦 Archive'}
+            </button>
+          </div>
+        </div>
       ))}
       {tickets.length === 0 && <div className="empty-state">No tickets match this view.</div>}
     </section>
