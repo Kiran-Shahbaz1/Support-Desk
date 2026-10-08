@@ -14,11 +14,11 @@ import { commandHelp, parseWorkspaceCommand } from './workspaceCommand'
 import { applyWorkspaceCommand } from './workspaceCommandActions'
 
 const initialTickets = [
-  { id: 1042, subject: 'Invoice export returns a blank PDF', customer: 'Maya Chen', initials: 'MC', email: 'maya.chen@acme.co', description: 'The finance team receives a blank PDF when exporting the monthly invoice report.', module: 'Billing', department: 'Finance support', channel: 'Email', priority: 'Critical', status: 'Open', assignee: 'Kiran Shah', sla: '00:42 left', created: '12 min ago', dueDate: 'Today, 9:30 PM', tag: 'SLA risk', tags: ['SLA risk', 'Invoice'], comments: [], history: ['Ticket created via email', 'Priority raised to Critical'], archived: false },
-  { id: 1041, subject: 'Cannot invite a new workspace member', customer: 'Theo Martin', initials: 'TM', email: 'theo.martin@northwind.io', description: 'The invite button spins indefinitely for a new workspace member.', module: 'Workspace', department: 'Core support', channel: 'Chat', priority: 'High', status: 'Pending', assignee: 'Ahmed Khan', sla: '02:18 left', created: '38 min ago', dueDate: 'Today, 11:00 PM', tag: 'Waiting on customer', tags: ['Invite', 'Workspace'], comments: ['Requested a screen recording from the customer.'], history: ['Ticket created via chat', 'Assigned to Ahmed Khan'], archived: false },
-  { id: 1040, subject: 'SSO setup questions for the finance team', customer: 'Priya Nair', initials: 'PN', email: 'priya.nair@contoso.com', description: 'Customer needs guidance for configuring SAML metadata and role mapping.', module: 'Security', department: 'Enterprise', channel: 'Email', priority: 'Medium', status: 'Open', assignee: 'Sara Davis', sla: '05:40 left', created: '1 hr ago', dueDate: 'Tomorrow, 10:00 AM', tag: 'Enterprise', tags: ['SSO', 'Enterprise'], comments: [], history: ['Ticket created via email'], archived: false },
-  { id: 1039, subject: 'Dashboard data is delayed by one hour', customer: 'Jon Bell', initials: 'JB', email: 'jon.bell@globex.com', description: 'Analytics dashboard is showing data from the previous hour.', module: 'Analytics', department: 'Data support', channel: 'API', priority: 'High', status: 'Open', assignee: 'Kiran Shah', sla: '03:11 left', created: '2 hrs ago', dueDate: 'Today, 10:15 PM', tag: 'Data', tags: ['Analytics', 'Incident'], comments: [], history: ['Ticket created via API', 'Tagged as Incident'], archived: false },
-  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'], archived: true },
+  { id: 1042, subject: 'Invoice export returns a blank PDF', customer: 'Maya Chen', initials: 'MC', email: 'maya.chen@acme.co', description: 'The finance team receives a blank PDF when exporting the monthly invoice report.', module: 'Billing', department: 'Finance support', team: 'Finance support', channel: 'Email', priority: 'Critical', status: 'Open', assignee: 'Kiran Shah', sla: '00:42 left', created: '12 min ago', dueDate: 'Today, 9:30 PM', tag: 'SLA risk', tags: ['SLA risk', 'Invoice'], comments: [], history: ['Ticket created via email', 'Priority raised to Critical'], archived: false },
+  { id: 1041, subject: 'Cannot invite a new workspace member', customer: 'Theo Martin', initials: 'TM', email: 'theo.martin@northwind.io', description: 'The invite button spins indefinitely for a new workspace member.', module: 'Workspace', department: 'Core support', team: 'Core support', channel: 'Chat', priority: 'High', status: 'Pending', assignee: 'Ahmed Khan', sla: '02:18 left', created: '38 min ago', dueDate: 'Today, 11:00 PM', tag: 'Waiting on customer', tags: ['Invite', 'Workspace'], comments: ['Requested a screen recording from the customer.'], history: ['Ticket created via chat', 'Assigned to Ahmed Khan'], archived: false },
+  { id: 1040, subject: 'SSO setup questions for the finance team', customer: 'Priya Nair', initials: 'PN', email: 'priya.nair@contoso.com', description: 'Customer needs guidance for configuring SAML metadata and role mapping.', module: 'Security', department: 'Enterprise', team: 'Enterprise', channel: 'Email', priority: 'Medium', status: 'Open', assignee: 'Sara Davis', sla: '05:40 left', created: '1 hr ago', dueDate: 'Tomorrow, 10:00 AM', tag: 'Enterprise', tags: ['SSO', 'Enterprise'], comments: [], history: ['Ticket created via email'], archived: false },
+  { id: 1039, subject: 'Dashboard data is delayed by one hour', customer: 'Jon Bell', initials: 'JB', email: 'jon.bell@globex.com', description: 'Analytics dashboard is showing data from the previous hour.', module: 'Analytics', department: 'Data support', team: 'Data support', channel: 'API', priority: 'High', status: 'Open', assignee: 'Kiran Shah', sla: '03:11 left', created: '2 hrs ago', dueDate: 'Today, 10:15 PM', tag: 'Data', tags: ['Analytics', 'Incident'], comments: [], history: ['Ticket created via API', 'Tagged as Incident'], archived: false },
+  { id: 1038, subject: 'How do I change my notification digest?', customer: 'Owen Wilson', initials: 'OW', email: 'owen.wilson@example.com', description: 'Customer asked where notification digest preferences can be changed.', module: 'Account', department: 'Core support', team: 'Core support', channel: 'Web form', priority: 'Low', status: 'Resolved', assignee: 'Ahmed Khan', sla: 'Closed', created: 'Yesterday', dueDate: 'Closed', tag: 'How-to', tags: ['How-to'], comments: ['Shared the notification preferences article.'], history: ['Ticket created via web form', 'Resolved by Ahmed Khan'], archived: true },
 ]
 
 const normalizeCommunication = (entry, visibility, index) => typeof entry === 'string' ? { id: `${visibility}-${index}-${entry}`, body: entry, author: 'Workspace administrator', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), edited: false, mentions: [...new Set(entry.match(/@[a-z0-9_.-]+/gi) || [])], visibility } : { visibility, edited: false, mentions: [], ...entry }
@@ -107,6 +107,33 @@ function App() {
   const [storedAutomationRules, setAutomationRules] = useLocalStorageState('relay:automation-rules', initialAutomationRules)
   const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 0)
 
+  // -------------------------------------------------------------
+  // DYNAMIC OPTIONS FOR DROPDOWNS (Guaranteed Rich Options)
+  // -------------------------------------------------------------
+  const availableCustomers = useMemo(() => {
+    const defaultList = ['Maya Chen', 'Theo Martin', 'Priya Nair', 'Jon Bell', 'Owen Wilson', 'Imtyaz']
+    const fromState = (customers || []).map((c) => (typeof c === 'string' ? c : c.name))
+    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
+  }, [customers])
+
+  const availableAgents = useMemo(() => {
+    const defaultList = ['Kiran Shah', 'Ahmed Khan', 'Sara Davis', 'Maya Patel']
+    const fromState = (agents || []).map((a) => (typeof a === 'string' ? a : a.name))
+    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
+  }, [agents])
+
+  const availableDepartments = useMemo(() => {
+    const defaultList = ['Core support', 'Finance support', 'Data support', 'Enterprise', 'Billing', 'Operations']
+    const fromState = (departments || []).map((d) => (typeof d === 'string' ? d : d.name))
+    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
+  }, [departments])
+
+  const availableTeams = useMemo(() => {
+    const defaultList = ['Core support', 'Finance support', 'Data support', 'Leadership', 'Enterprise', 'Tier 1 Support']
+    const fromState = (teams || []).map((t) => (typeof t === 'string' ? t : t.name))
+    return [...new Set([...defaultList, ...fromState].filter(Boolean))]
+  }, [teams])
+
   const automationRules = useMemo(() => storedAutomationRules.map((rule) => {
     const wasMisclassifiedSlaRule = automationSchemaVersion < 1 && rule.id === 'rule-sla' && rule.name === 'SLA risk alert' && rule.triggerType === 'sla-under-hour' && rule.actionType === 'assign-manager' && rule.action === 'Assign to Kiran Shah'
     return normalizeAutomationRule(wasMisclassifiedSlaRule ? { ...rule, actionType: 'notify-assignee', action: 'Notify assignee and manager' } : rule)
@@ -122,7 +149,23 @@ function App() {
     if (!visible && location.pathname === '/tickets/new') navigate('/tickets')
   }
   const [formError, setFormError] = useState('')
-  const [ticketForm, setTicketForm] = useState({ subject: '', customer: '', email: '', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
+  const [ticketForm, setTicketForm] = useState({ 
+    subject: '', 
+    customer: 'Maya Chen', 
+    email: 'maya.chen@acme.co', 
+    description: '', 
+    module: 'General', 
+    category: 'General inquiry', 
+    priority: 'High', 
+    assignee: 'Unassigned', 
+    department: 'Core support', 
+    team: 'Core support', 
+    tags: '', 
+    dueDate: '', 
+    sla: 'Standard', 
+    internalNotes: '', 
+    attachments: '' 
+  })
   const [filter, setFilter] = useState('All')
   const [priorityFilter, setPriorityFilter] = useState('All')
   const [assigneeFilter, setAssigneeFilter] = useState('All')
@@ -427,7 +470,7 @@ function App() {
     recordActivity(`Created ticket #${nextId} from intake form`)
     setShowCreate(false)
     setFormError('')
-    setTicketForm({ subject: '', customer: '', email: '', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
+    setTicketForm({ subject: '', customer: 'Maya Chen', email: 'maya.chen@acme.co', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
     goToView('Tickets')
     setNotice(`Ticket created and synchronized with database.`)
     window.dispatchEvent(new Event('relay:data-updated'))
@@ -617,9 +660,229 @@ function App() {
       </main>
 
       <div className="command-bar"><div className="command-label"><span className="command-symbol">✦</span><strong>AI Command Box</strong><small>Workspace actions</small></div><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runCommand()} placeholder={'e.g. create agent, total customers, or show open tickets'} /><kbd>Enter</kbd><button onClick={runCommand} disabled={isCommandRunning || !command.trim()}>{isCommandRunning ? <><span className="command-spinner" />Running...</> : <>Run command <span>↗</span></>}</button></div>
-      {selectedTicket && <TicketDetailProfessional ticket={selectedTicket} onClose={() => setSelectedTicketId(null)} onUpdate={updateTicket} />}
       
-      {showCreate && <div className="modal-backdrop" onClick={() => setShowCreate(false)}><div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="overline">Ticket intake</p><h2>Create a new ticket</h2></div><button className="close-button" onClick={() => setShowCreate(false)}>×</button></div>{formError && <div className="form-error" role="alert">! {formError}</div>}<div className="form-row"><label>Subject<input value={ticketForm.subject} onChange={(event) => setTicketForm({ ...ticketForm, subject: event.target.value })} placeholder="Short issue summary" /></label><label>Customer<input value={ticketForm.customer} onChange={(event) => setTicketForm({ ...ticketForm, customer: event.target.value })} placeholder="Customer name" /></label></div><div className="form-row"><label>Customer email<input type="email" value={ticketForm.email} onChange={(event) => setTicketForm({ ...ticketForm, email: event.target.value })} placeholder="customer@example.com" /></label><label>Module<input value={ticketForm.module} onChange={(event) => setTicketForm({ ...ticketForm, module: event.target.value })} placeholder="Billing, Account..." /></label></div><div className="form-row"><label>Category<input value={ticketForm.category} onChange={(event) => setTicketForm({ ...ticketForm, category: event.target.value })} placeholder="Incident, question..." /></label><label>Priority<select value={ticketForm.priority} onChange={(event) => setTicketForm({ ...ticketForm, priority: event.target.value })}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><div className="form-row"><label>Assigned agent<select value={ticketForm.assignee} onChange={(event) => setTicketForm({ ...ticketForm, assignee: event.target.value })}><option>Unassigned</option><option>Kiran Shah</option><option>Ahmed Khan</option><option>Sara Davis</option></select></label><label>Department<input value={ticketForm.department} onChange={(event) => setTicketForm({ ...ticketForm, department: event.target.value })} /></label></div><div className="form-row"><label>Team<input value={ticketForm.team} onChange={(event) => setTicketForm({ ...ticketForm, team: event.target.value })} /></label><label>Due date<input type="datetime-local" value={ticketForm.dueDate} onChange={(event) => setTicketForm({ ...ticketForm, dueDate: event.target.value })} /></label></div><div className="form-row"><label>SLA<select value={ticketForm.sla} onChange={(event) => setTicketForm({ ...ticketForm, sla: event.target.value })}><option>Standard</option><option>Priority</option><option>Enterprise</option><option>Custom</option></select></label><label>Tags<input value={ticketForm.tags} onChange={(event) => setTicketForm({ ...ticketForm, tags: event.target.value })} placeholder="billing, urgent" /></label></div><label>Description<textarea value={ticketForm.description} onChange={(event) => setTicketForm({ ...ticketForm, description: event.target.value })} placeholder="Describe the issue..." /></label><label>Internal notes<textarea value={ticketForm.internalNotes} onChange={(event) => setTicketForm({ ...ticketForm, internalNotes: event.target.value })} placeholder="Visible to agents only" /></label><label>Attachments<input value={ticketForm.attachments} onChange={(event) => setTicketForm({ ...ticketForm, attachments: event.target.value })} placeholder="File names separated by commas" /></label><div className="modal-actions"><button className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button><button className="primary-button" onClick={createTicket}>Create ticket <span>→</span></button></div></div></div>}
+      {/* Drawer with dynamic Dropdowns passed */}
+      {selectedTicket && (
+        <TicketDetailProfessional 
+          ticket={selectedTicket} 
+          onClose={() => setSelectedTicketId(null)} 
+          onUpdate={updateTicket}
+          customers={availableCustomers}
+          agents={availableAgents}
+          teams={availableTeams}
+          departments={availableDepartments}
+        />
+      )}
+      
+      {/* ------------------------------------------------------------- */}
+      {/* NEW TICKET MODAL WITH 100% RELATIONAL ENTITY DROPDOWNS       */}
+      {/* ------------------------------------------------------------- */}
+      {showCreate && (
+        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
+          <div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <p className="overline">Ticket intake</p>
+                <h2>Create a new ticket</h2>
+              </div>
+              <button className="close-button" onClick={() => setShowCreate(false)}>×</button>
+            </div>
+            
+            {formError && <div className="form-error" role="alert">! {formError}</div>}
+            
+            <div className="form-row">
+              <label>
+                Subject *
+                <input 
+                  value={ticketForm.subject} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, subject: event.target.value })} 
+                  placeholder="Short issue summary" 
+                  required
+                />
+              </label>
+
+              {/* 1. CUSTOMER DROPDOWN */}
+              <label>
+                Customer *
+                <select
+                  value={ticketForm.customer}
+                  onChange={(event) => {
+                    const selectedName = event.target.value
+                    const generatedEmail = `${selectedName.toLowerCase().replace(/\s+/g, '.')}@example.com`
+                    setTicketForm({
+                      ...ticketForm,
+                      customer: selectedName,
+                      email: generatedEmail,
+                    })
+                  }}
+                  required
+                >
+                  {availableCustomers.map((cName) => (
+                    <option key={cName} value={cName}>{cName}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="form-row">
+              <label>
+                Customer email
+                <input 
+                  type="email" 
+                  value={ticketForm.email} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, email: event.target.value })} 
+                  placeholder="customer@example.com" 
+                />
+              </label>
+              <label>
+                Module
+                <input 
+                  value={ticketForm.module} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, module: event.target.value })} 
+                  placeholder="Billing, Account, Workspace..." 
+                />
+              </label>
+            </div>
+
+            <div className="form-row">
+              <label>
+                Category
+                <select 
+                  value={ticketForm.category} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, category: event.target.value })}
+                >
+                  <option value="General inquiry">General inquiry</option>
+                  <option value="Technical incident">Technical incident</option>
+                  <option value="Billing question">Billing question</option>
+                  <option value="Feature request">Feature request</option>
+                  <option value="Security inquiry">Security inquiry</option>
+                </select>
+              </label>
+              <label>
+                Priority
+                <select 
+                  value={ticketForm.priority} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, priority: event.target.value })}
+                >
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="form-row">
+              {/* 2. ASSIGNED AGENT DROPDOWN */}
+              <label>
+                Assigned agent
+                <select 
+                  value={ticketForm.assignee} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, assignee: event.target.value })}
+                >
+                  <option value="Unassigned">Unassigned</option>
+                  {availableAgents.map((aName) => (
+                    <option key={aName} value={aName}>{aName}</option>
+                  ))}
+                </select>
+              </label>
+
+              {/* 3. DEPARTMENT DROPDOWN */}
+              <label>
+                Department
+                <select 
+                  value={ticketForm.department} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, department: event.target.value })}
+                >
+                  {availableDepartments.map((dName) => (
+                    <option key={dName} value={dName}>{dName}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="form-row">
+              {/* 4. TEAM DROPDOWN */}
+              <label>
+                Team
+                <select 
+                  value={ticketForm.team} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, team: event.target.value })}
+                >
+                  {availableTeams.map((tName) => (
+                    <option key={tName} value={tName}>{tName}</option>
+                  ))}
+                </select>
+              </label>
+              
+              <label>
+                Due date
+                <input 
+                  type="datetime-local" 
+                  value={ticketForm.dueDate} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, dueDate: event.target.value })} 
+                />
+              </label>
+            </div>
+
+            <div className="form-row">
+              <label>
+                SLA
+                <select 
+                  value={ticketForm.sla} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, sla: event.target.value })}
+                >
+                  <option value="Standard">Standard</option>
+                  <option value="Priority">Priority</option>
+                  <option value="Enterprise">Enterprise</option>
+                  <option value="Custom">Custom</option>
+                </select>
+              </label>
+              <label>
+                Tags
+                <input 
+                  value={ticketForm.tags} 
+                  onChange={(event) => setTicketForm({ ...ticketForm, tags: event.target.value })} 
+                  placeholder="billing, urgent (comma separated)" 
+                />
+              </label>
+            </div>
+
+            <label>
+              Description *
+              <textarea 
+                value={ticketForm.description} 
+                onChange={(event) => setTicketForm({ ...ticketForm, description: event.target.value })} 
+                placeholder="Describe the issue..." 
+                required
+              />
+            </label>
+
+            <label>
+              Internal notes
+              <textarea 
+                value={ticketForm.internalNotes} 
+                onChange={(event) => setTicketForm({ ...ticketForm, internalNotes: event.target.value })} 
+                placeholder="Visible to agents only" 
+              />
+            </label>
+
+            <label>
+              Attachments
+              <input 
+                value={ticketForm.attachments} 
+                onChange={(event) => setTicketForm({ ...ticketForm, attachments: event.target.value })} 
+                placeholder="File names separated by commas" 
+              />
+            </label>
+
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="button" className="primary-button" onClick={createTicket}>Create ticket <span>→</span></button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {entityModal.isOpen && (
         <div className="modal-backdrop" onClick={() => setEntityModal({ ...entityModal, isOpen: false })}>
@@ -675,10 +938,14 @@ function App() {
                   </label>
                   <label>
                     Department
-                    <input
+                    <select
                       value={entityModal.department}
                       onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
-                    />
+                    >
+                      {availableDepartments.map((dName) => (
+                        <option key={dName} value={dName}>{dName}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               )}
@@ -687,10 +954,14 @@ function App() {
                 <div className="form-row">
                   <label style={{ width: '100%' }}>
                     Department
-                    <input
+                    <select
                       value={entityModal.department}
                       onChange={(e) => setEntityModal({ ...entityModal, department: e.target.value })}
-                    />
+                    >
+                      {availableDepartments.map((dName) => (
+                        <option key={dName} value={dName}>{dName}</option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               )}
