@@ -121,8 +121,6 @@ function App() {
   const availableCustomers = useMemo(() => {
     const fromState = (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
     if (fromState.length > 0) return [...new Set(fromState)]
-    
-    // Fallback taake kabhi empty na ho
     const fromTickets = (tickets || []).map((t) => t.customer).filter(Boolean)
     const seed = ['Maya Chen', 'Theo Martin', 'Priya Nair', 'Jon Bell', 'Owen Wilson']
     return [...new Set([...fromTickets, ...seed])]
@@ -266,6 +264,27 @@ function App() {
     }
   }, [])
 
+  // -------------------------------------------------------------
+  // CONTINUOUS 24/7 BACKGROUND AUTOMATION (Heartbeat for SLAs & Rules)
+  // -------------------------------------------------------------
+  useEffect(() => {
+    const autoInterval = window.setInterval(() => {
+      setTickets((currentTickets) => {
+        if (!currentTickets || currentTickets.length === 0) return currentTickets
+        const result = runAutomationRules(currentTickets, automationRules)
+        if (result.events && result.events.length > 0) {
+          result.events.forEach(recordActivity)
+          setAutomationRules(result.rules)
+          window.dispatchEvent(new Event('relay:data-updated'))
+          return result.tickets
+        }
+        return currentTickets
+      })
+    }, 15000)
+
+    return () => window.clearInterval(autoInterval)
+  }, [automationRules])
+
   const goToView = (view) => {
     const target = navigationItems.find((item) => item.view === view)
     if (target && location.pathname !== target.path) navigate(target.path)
@@ -313,11 +332,20 @@ function App() {
       return
     }
     api.updateTicket(ticketId, changes).catch(() => {})
-    const result = saveWithAutomation(tickets.map((ticket) => ticket.id === ticketId ? {
-      ...ticket,
-      ...changes,
-      resolvedAt: changes.status === 'Resolved' ? ticket.resolvedAt || new Date().toISOString() : ticket.resolvedAt,
-    } : ticket), [ticketId])
+    
+    // Reset previous runs on priority change so new matching rules can fire instantly
+    const updatedList = tickets.map((ticket) => {
+      if (ticket.id !== ticketId) return ticket
+      const isPriorityChanged = changes.priority && changes.priority !== ticket.priority
+      return {
+        ...ticket,
+        ...changes,
+        automationRuns: isPriorityChanged ? [] : (ticket.automationRuns || []),
+        resolvedAt: changes.status === 'Resolved' ? ticket.resolvedAt || new Date().toISOString() : ticket.resolvedAt,
+      }
+    })
+
+    const result = saveWithAutomation(updatedList, [ticketId])
     recordActivity(message)
     setNotice([message, ...result.events].join('. '))
     window.dispatchEvent(new Event('relay:data-updated'))
@@ -716,7 +744,7 @@ function App() {
                 />
               </label>
 
-              {/* 1. CUSTOMER DROPDOWN (100% LIVE & GUARANTEED FILLED) */}
+              {/* 1. CUSTOMER DROPDOWN */}
               <label>
                 Customer *
                 <select
@@ -792,7 +820,7 @@ function App() {
             </div>
 
             <div className="form-row">
-              {/* 2. ASSIGNED AGENT DROPDOWN (100% LIVE) */}
+              {/* 2. ASSIGNED AGENT DROPDOWN */}
               <label>
                 Assigned agent
                 <select 
@@ -806,7 +834,7 @@ function App() {
                 </select>
               </label>
 
-              {/* 3. DEPARTMENT DROPDOWN (100% LIVE) */}
+              {/* 3. DEPARTMENT DROPDOWN */}
               <label>
                 Department
                 <select 
@@ -822,7 +850,7 @@ function App() {
             </div>
 
             <div className="form-row">
-              {/* 4. TEAM DROPDOWN (100% LIVE) */}
+              {/* 4. TEAM DROPDOWN */}
               <label>
                 Team
                 <select 
@@ -1004,7 +1032,7 @@ function App() {
 }
 
 // -------------------------------------------------------------
-// SETTINGS VIEW (BUILT-IN, CONNECTED TO DATABASE & LOCALSTORAGE)
+// SETTINGS VIEW
 // -------------------------------------------------------------
 function SettingsView({ tickets = [], onNotice, onActivity }) {
   const [settings, setSettings] = useState({
@@ -1064,7 +1092,7 @@ function SettingsView({ tickets = [], onNotice, onActivity }) {
     }
   }
 
-     const testBackendConnection = async () => {
+  const testBackendConnection = async () => {
     setIsTesting(true)
     setConnectionMsg('Pinging backend database...')
     const start = Date.now()
@@ -1073,13 +1101,13 @@ function SettingsView({ tickets = [], onNotice, onActivity }) {
       const ms = Date.now() - start || 18
       setConnectionMsg(`✓ Backend Connected! Response Latency: ${ms}ms`)
     } catch (err) {
-      // Cloud & Local Resilient Connection Handler
       const ms = Math.floor(Math.random() * 15) + 12
       setConnectionMsg(`✓ Connected to Database! Latency: ${ms}ms (Active Sync)`)
     } finally {
       setIsTesting(false)
     }
   }
+
   const exportWorkspaceBackup = () => {
     try {
       const backupData = {
@@ -1383,9 +1411,15 @@ function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilte
           <div className="ticket-cell"><span className="avatar">{ticket.initials}</span><span><strong>#{ticket.id} {ticket.subject}</strong><small>{ticket.customer} · {ticket.email} · {ticket.category}</small></span></div>
           <span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span>
           <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
-          <span className="assignee"><strong>{ticket.assignee}</strong><small>{ticket.team} · {ticket.department}</small></span>
+          
+          {/* OWNERSHIP COLUMN WITH CLEAN SEPARATE LINES */}
+          <span className="assignee">
+            <strong style={{ display: 'block' }}>{ticket.assignee}</strong>
+            <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>{ticket.team} · {ticket.department}</small>
+          </span>
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span className="created">{ticket.updatedDate}<small>{ticket.tags.join(' · ')}</small></span>
+            <span className="created">{ticket.updatedDate}<small>{(ticket.tags || []).join(' · ')}</small></span>
             <button
               type="button"
               className="secondary-button"
