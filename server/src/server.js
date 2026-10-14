@@ -44,3 +44,28 @@ try {
 } catch (error) {
   console.error('Fatal startup error:', error)
 }
+import { sendTicketNotification } from './emailService.js'; // path check kar lein
+
+// Automated Notification API Endpoint
+app.post('/api/notify-ticket', async (req, res) => {
+  try {
+    const { ticket, ruleName, recipient } = req.body;
+
+    console.log(`⚡ Automation Triggered: [${ruleName}] for Ticket #${ticket?.id}`);
+
+    const result = await sendTicketNotification({
+      to: recipient || 'support-agent@company.local',
+      subject: `[Automated Alert: ${ruleName}] Ticket #${ticket?.id} - ${ticket?.title}`,
+      ticket: ticket
+    });
+
+    res.json({
+      success: true,
+      message: 'Automated email dispatched successfully',
+      previewUrl: result.previewUrl
+    });
+  } catch (error) {
+    console.error('Email API Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});

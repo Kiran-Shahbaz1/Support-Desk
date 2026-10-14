@@ -18,54 +18,15 @@ export const automationActions = [
 ]
 
 export const initialAutomationRules = [
-  { 
-    id: 'rule-critical', 
-    name: 'Escalate critical tickets', 
-    triggerType: 'priority-high', 
-    trigger: 'Priority is High', 
-    actionType: 'assign-manager', 
-    action: 'Assign to Kiran Shah', 
-    status: 'Active', 
-    runs: 18 
-  },
-  { 
-    id: 'rule-deadline', 
-    name: 'Urgent Deadline & SLA Alert', 
-    triggerType: 'deadline-overdue', 
-    trigger: 'Deadline or SLA breach reached / approaching', 
-    actionType: 'notify-deadline', 
-    action: 'Send Urgent Deadline / SLA Breach Alert', 
-    status: 'Active', 
-    runs: 25 
-  },
-  { 
-    id: 'rule-sla', 
-    name: 'SLA risk alert', 
-    triggerType: 'sla-under-hour', 
-    trigger: 'SLA has less than 60 minutes left', 
-    actionType: 'notify-assignee', 
-    action: 'Add a notification to the activity feed', 
-    status: 'Active', 
-    runs: 42 
-  },
-  { 
-    id: 'rule-resolved', 
-    name: 'Archive old resolved tickets', 
-    triggerType: 'resolved-seven-days', 
-    trigger: 'Resolved for at least 7 days', 
-    actionType: 'archive-ticket', 
-    action: 'Archive the ticket', 
-    status: 'Paused', 
-    runs: 8 
-  },
+  { id: 'rule-critical', name: 'Escalate critical tickets', triggerType: 'priority-high', trigger: 'Priority is High', actionType: 'assign-manager', action: 'Assign to Kiran Shah', status: 'Active', runs: 18 },
+  { id: 'rule-deadline', name: 'Urgent Deadline & SLA Alert', triggerType: 'deadline-overdue', trigger: 'Deadline or SLA breach reached / approaching', actionType: 'notify-deadline', action: 'Send Urgent Deadline / SLA Breach Alert', status: 'Active', runs: 25 },
+  { id: 'rule-sla', name: 'SLA risk alert', triggerType: 'sla-under-hour', trigger: 'SLA has less than 60 minutes left', actionType: 'notify-assignee', action: 'Add a notification to the activity feed', status: 'Active', runs: 42 },
+  { id: 'rule-resolved', name: 'Archive old resolved tickets', triggerType: 'resolved-seven-days', trigger: 'Resolved for at least 7 days', actionType: 'archive-ticket', action: 'Archive the ticket', status: 'Paused', runs: 8 },
 ]
 
 export function getTriggerType(rule) {
   if (rule.triggerType) {
-    const valid = [
-      'priority-critical', 'priority-high', 'priority-medium', 'priority-low',
-      'deadline-overdue', 'sla-under-hour', 'resolved-seven-days', 'unassigned-ticket'
-    ]
+    const valid = ['priority-critical', 'priority-high', 'priority-medium', 'priority-low', 'deadline-overdue', 'sla-under-hour', 'resolved-seven-days', 'unassigned-ticket']
     if (valid.includes(rule.triggerType)) return rule.triggerType
   }
   const triggerText = String(rule.trigger || rule.name || '').toLowerCase()
@@ -113,12 +74,9 @@ function hasSlaRisk(ticket) {
 function isDeadlineApproachingOrPassed(ticket, now) {
   if (ticket.status === 'Resolved' || ticket.status === 'Closed') return false
   if (hasSlaRisk(ticket)) return true
-  
   if (ticket.dueDate) {
     const dueTime = new Date(ticket.dueDate).getTime()
-    if (!isNaN(dueTime)) {
-      if (dueTime <= now + (2 * 60 * 60 * 1000)) return true
-    }
+    if (!isNaN(dueTime) && dueTime <= now + (2 * 60 * 60 * 1000)) return true
     if (/overdue|today|passed|expired/i.test(String(ticket.dueDate))) return true
   }
   return false
@@ -126,106 +84,109 @@ function isDeadlineApproachingOrPassed(ticket, now) {
 
 function matchesTrigger(triggerType, ticket, now) {
   const priority = String(ticket.priority || '').trim().toLowerCase()
-
-  if (triggerType === 'priority-critical') return priority === 'critical'
-  if (triggerType === 'priority-high') return priority === 'high' || priority === 'critical'
+  if (triggerType === 'priority-critical' || triggerType === 'priority-high') {
+    return priority === 'high' || priority === 'critical'
+  }
   if (triggerType === 'priority-medium') return priority === 'medium'
   if (triggerType === 'priority-low') return priority === 'low'
-
   if (triggerType === 'deadline-overdue') return isDeadlineApproachingOrPassed(ticket, now)
   if (triggerType === 'sla-under-hour') return ticket.status !== 'Resolved' && hasSlaRisk(ticket)
-
-  if (triggerType === 'unassigned-ticket') {
-    return !ticket.assignee || ticket.assignee.toLowerCase() === 'unassigned'
-  }
-
+  if (triggerType === 'unassigned-ticket') return !ticket.assignee || ticket.assignee.toLowerCase() === 'unassigned'
   if (triggerType === 'resolved-seven-days') {
     if (ticket.status !== 'Resolved' || !ticket.resolvedAt) return false
     return now - new Date(ticket.resolvedAt).getTime() >= 7 * 24 * 60 * 60 * 1000
   }
-
   return false
 }
 
-/**
- * Single Ticket par Instant Rules Apply karne ka Function
- * Yeh tab chalta hai jab koi bhi ticket Edit ya Create ho
- */
-export function applyRulesToSingleTicket(ticket, rules, now = Date.now()) {
-  let updatedTicket = { ...ticket, automationRuns: [...(ticket.automationRuns || [])] }
+export function runAutomationRules(tickets, rules, { ticketIds, now = Date.now() } = {}) {
+  const includedIds = ticketIds ? new Set(ticketIds) : null
+  const nextTickets = tickets.map((ticket) => ({ ...ticket, automationRuns: [...(ticket.automationRuns || [])] }))
+  const runCounts = new Map()
   const events = []
 
   for (const rule of rules) {
     if (rule.status !== 'Active') continue
     const triggerType = getTriggerType(rule)
     const actionType = getActionType(rule)
-    if (!triggerType || !actionType) continue
+    if (!triggerType || !actionType || !rule.id) continue
 
-    // Check if rule condition matches the ticket
-    if (matchesTrigger(triggerType, updatedTicket, now)) {
+    for (const ticket of nextTickets) {
+      if (includedIds && !includedIds.has(ticket.id)) continue
+      
+      // Condition match check
+      if (!matchesTrigger(triggerType, ticket, now)) continue
+      
+      // Force assign: Agar ticket already Kiran Shah par hai toh skip, warna kisi par bhi ho badal kar Kiran Shah karo!
+      if (actionType === 'assign-manager' && ticket.assignee === 'Kiran Shah') continue
+
       const timestamp = new Date(now).toISOString()
+      const history = [...(ticket.history || [])]
 
-      if (actionType === 'assign-manager' && updatedTicket.assignee !== 'Kiran Shah') {
-        updatedTicket.assignee = 'Kiran Shah'
-        events.push(`Automation: Ticket #${updatedTicket.id} auto-assigned to Kiran Shah (Matched rule: ${rule.name})`)
+      if (actionType === 'assign-manager') {
+        ticket.assignee = 'Kiran Shah'
+        events.push(`Automation: Ticket #${ticket.id} (${ticket.priority}) assigned to Kiran Shah`)
       }
 
       if (actionType === 'notify-deadline') {
-        events.push(`🚨 DEADLINE ALERT: Ticket #${updatedTicket.id} is approaching its deadline!`)
-        updatedTicket.tags = Array.from(new Set([...(updatedTicket.tags || []), 'SLA Alert']))
+        events.push(`🚨 DEADLINE ALERT: Ticket #${ticket.id} deadline alert`)
+        ticket.tags = Array.from(new Set([...(ticket.tags || []), 'SLA Alert']))
       }
 
-      if (actionType === 'resolve-ticket' && updatedTicket.status !== 'Resolved') {
-        updatedTicket.status = 'Resolved'
-        updatedTicket.sla = 'Closed'
-        updatedTicket.resolvedAt = timestamp
-        events.push(`Automation: Ticket #${updatedTicket.id} marked as Resolved`)
+      if (actionType === 'notify-assignee') {
+        events.push(`Notification: Automation “${rule.name}” applied on #${ticket.id}`)
       }
 
-      if (actionType === 'archive-ticket' && updatedTicket.status === 'Resolved' && !updatedTicket.archived) {
-        updatedTicket.archived = true
-        updatedTicket.archivedAt = timestamp
-        events.push(`Automation: Ticket #${updatedTicket.id} moved to Archives`)
+      if (actionType === 'resolve-ticket') {
+        ticket.status = 'Resolved'
+        ticket.sla = 'Closed'
+        ticket.resolvedAt = timestamp
       }
 
-      if (!updatedTicket.automationRuns.includes(rule.id)) {
-        updatedTicket.automationRuns.push(rule.id)
+      if (actionType === 'archive-ticket' && ticket.status === 'Resolved') {
+        ticket.archived = true
+        ticket.archivedAt = timestamp
       }
+
+      // Check karein kya ye rule is ticket par pehli dafa run ho raha hai
+      const isFirstRun = !ticket.automationRuns.includes(rule.id)
+      if (isFirstRun) {
+        ticket.automationRuns.push(rule.id)
+        
+        // 👉 STEP 3 (CONNECTED): Send Automated Email for this rule trigger!
+        sendAutomationEmail(ticket, rule.name)
+      }
+      
+      ticket.history = [...history, `Automation “${rule.name}” executed`]
+      ticket.updatedDate = new Date(now).toLocaleString()
+      runCounts.set(rule.id, (runCounts.get(rule.id) || 0) + 1)
     }
   }
 
-  return { ticket: updatedTicket, events }
+  const nextRules = rules.map((rule) => ({ ...rule, runs: (rule.runs || 0) + (runCounts.get(rule.id) || 0) }))
+  return { tickets: nextTickets, rules: nextRules, events }
 }
 
-/**
- * Bulk Run - Saari tickets par rules execute karne ke liye
- */
-export function runAutomationRules(tickets, rules, { ticketIds, now = Date.now() } = {}) {
-  const includedIds = ticketIds ? new Set(ticketIds) : null
-  const runCounts = new Map()
-  let allEvents = []
+// Function to notify backend whenever a rule matches
+export async function sendAutomationEmail(ticket, ruleName) {
+  try {
+    const backendUrl = 'http://localhost:5001'; // Apne backend ka port check kar lein
 
-  const nextTickets = tickets.map((ticket) => {
-    if (includedIds && !includedIds.has(ticket.id)) return ticket
+    const response = await fetch(`${backendUrl}/api/notify-ticket`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticket,
+        ruleName: ruleName || 'Auto Assignment / SLA',
+        recipient: 'on-call-agent@support.local'
+      })
+    });
 
-    const { ticket: processedTicket, events } = applyRulesToSingleTicket(ticket, rules, now)
-    
-    if (events.length > 0) {
-      allEvents = [...allEvents, ...events]
-      // Run count update
-      for (const rule of rules) {
-        if (rule.status === 'Active' && matchesTrigger(getTriggerType(rule), ticket, now)) {
-          runCounts.set(rule.id, (runCounts.get(rule.id) || 0) + 1)
-        }
-      }
+    const data = await response.json();
+    if (data.previewUrl) {
+      console.log(`%c📨 EMAIL SENT FOR TICKET #${ticket.id}! Preview: ${data.previewUrl}`, 'color: #10b981; font-weight: bold;');
     }
-    return processedTicket
-  })
-
-  const nextRules = rules.map((rule) => ({
-    ...rule,
-    runs: (rule.runs || 0) + (runCounts.get(rule.id) || 0)
-  }))
-
-  return { tickets: nextTickets, rules: nextRules, events: allEvents }
+  } catch (error) {
+    console.error('Error firing automation email:', error);
+  }
 }
