@@ -23,21 +23,6 @@ const toFormValues = (ticket = {}) => ({
   tags: (ticket.tags || []).join(', '),
 })
 
-// Modern Badges Helper Functions
-const getStatusBadge = (status) => {
-  const s = (status || 'open').toLowerCase()
-  if (s === 'open') return 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-1 ring-emerald-500/10'
-  if (s === 'pending') return 'bg-amber-50 text-amber-700 border-amber-200 ring-1 ring-amber-500/10'
-  return 'bg-blue-50 text-blue-700 border-blue-200 ring-1 ring-blue-500/10'
-}
-
-const getPriorityBadge = (priority) => {
-  const p = (priority || 'medium').toLowerCase()
-  if (p === 'critical' || p === 'high') return 'bg-rose-50 text-rose-700 border-rose-200 ring-1 ring-rose-500/10'
-  if (p === 'medium') return 'bg-amber-50 text-amber-700 border-amber-200 ring-1 ring-amber-500/10'
-  return 'bg-slate-100 text-slate-600 border-slate-200'
-}
-
 export default function TicketDetailProfessional({ 
   ticket, 
   onClose, 
@@ -115,39 +100,161 @@ export default function TicketDetailProfessional({
     onClose()
   }
 
+  // Styles Object
+  const styles = {
+    overlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: 'rgba(15, 23, 42, 0.45)',
+      backdropFilter: 'blur(3px)',
+      display: 'flex',
+      justifyContent: 'flex-end',
+      zIndex: 99999,
+    },
+    drawer: {
+      width: '100%',
+      maxWidth: '580px',
+      height: '100%',
+      backgroundColor: '#ffffff',
+      boxShadow: '-8px 0 30px rgba(0, 0, 0, 0.15)',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: "'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif",
+      zIndex: 100000,
+    },
+    header: {
+      padding: '16px 24px',
+      borderBottom: '1px solid #e2e8f0',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#ffffff',
+    },
+    badgeId: {
+      fontFamily: 'monospace',
+      fontWeight: 'bold',
+      fontSize: '12px',
+      padding: '3px 8px',
+      borderRadius: '6px',
+      backgroundColor: '#f1f5f9',
+      color: '#334155',
+      border: '1px solid #cbd5e1',
+    },
+    statusPill: {
+      fontSize: '11px',
+      fontWeight: '600',
+      padding: '3px 10px',
+      borderRadius: '20px',
+      backgroundColor: '#dcfce7',
+      color: '#15803d',
+      border: '1px solid #bbf7d0',
+      textTransform: 'capitalize',
+    },
+    priorityPill: {
+      fontSize: '11px',
+      fontWeight: '600',
+      padding: '3px 10px',
+      borderRadius: '20px',
+      backgroundColor: ticket.priority === 'Critical' || ticket.priority === 'High' ? '#fee2e2' : '#fef3c7',
+      color: ticket.priority === 'Critical' || ticket.priority === 'High' ? '#b91c1c' : '#b45309',
+      border: `1px solid ${ticket.priority === 'Critical' || ticket.priority === 'High' ? '#fecaca' : '#fde68a'}`,
+    },
+    btnSecondary: {
+      padding: '6px 12px',
+      fontSize: '12px',
+      fontWeight: '600',
+      borderRadius: '6px',
+      border: '1px solid #cbd5e1',
+      backgroundColor: '#ffffff',
+      color: '#475569',
+      cursor: 'pointer',
+    },
+    btnDanger: {
+      padding: '6px 12px',
+      fontSize: '12px',
+      fontWeight: '600',
+      borderRadius: '6px',
+      border: '1px solid #fecaca',
+      backgroundColor: '#fef2f2',
+      color: '#dc2626',
+      cursor: 'pointer',
+    },
+    btnClose: {
+      background: 'none',
+      border: 'none',
+      fontSize: '22px',
+      color: '#94a3b8',
+      cursor: 'pointer',
+      padding: '0 4px',
+      lineHeight: '1',
+    },
+    body: {
+      flex: 1,
+      overflowY: 'auto',
+      padding: '24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '20px',
+      backgroundColor: '#ffffff',
+    },
+    inputLabel: {
+      display: 'block',
+      fontSize: '11px',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      color: '#64748b',
+      marginBottom: '6px',
+    },
+    inputField: {
+      width: '100%',
+      padding: '8px 12px',
+      fontSize: '13px',
+      borderRadius: '6px',
+      border: '1px solid #cbd5e1',
+      backgroundColor: '#ffffff',
+      boxSizing: 'border-box',
+      outline: 'none',
+      color: '#1e293b',
+    },
+    formGrid: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '12px',
+      marginBottom: '14px',
+    },
+    metaGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(2, 1fr)',
+      gap: '10px',
+    },
+    metaCard: {
+      padding: '12px 14px',
+      borderRadius: '8px',
+      backgroundColor: '#f8fafc',
+      border: '1px solid #e2e8f0',
+    },
+  }
+
   return (
-    <div 
-      className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex justify-end transition-opacity"
-      onClick={onClose}
-    >
-      <div 
-        className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col z-50 overflow-hidden border-l border-slate-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modern Drawer Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white sticky top-0 z-10">
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-              #{ticket.id}
-            </span>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadge(ticket.status)}`}>
-              {ticket.status}
-            </span>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${getPriorityBadge(ticket.priority)}`}>
-              {ticket.priority}
-            </span>
-            {ticket.archived && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
-                Archived
-              </span>
-            )}
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.drawer} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div style={styles.header}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={styles.badgeId}>#{ticket.id}</span>
+            <span style={styles.statusPill}>{ticket.status}</span>
+            <span style={styles.priorityPill}>{ticket.priority}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {onToggleArchive && (
               <button 
                 type="button" 
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition"
+                style={styles.btnSecondary}
                 onClick={() => onToggleArchive(ticket.id)}
               >
                 {ticket.archived ? 'Unarchive' : 'Archive'}
@@ -155,62 +262,47 @@ export default function TicketDetailProfessional({
             )}
             <button 
               type="button" 
-              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition"
+              style={styles.btnSecondary} 
               onClick={() => setIsEditing(!isEditing)}
             >
               {isEditing ? 'Cancel Edit' : 'Edit Ticket'}
             </button>
-            <button 
-              type="button" 
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition"
-              onClick={deleteTicket}
-            >
+            <button type="button" style={styles.btnDanger} onClick={deleteTicket}>
               Delete
             </button>
-            <button 
-              type="button" 
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition text-xl ml-1"
-              onClick={onClose}
-              aria-label="Close"
-            >
+            <button type="button" style={styles.btnClose} onClick={onClose} aria-label="Close">
               ×
             </button>
           </div>
         </div>
 
-        {/* Drawer Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Body */}
+        <div style={styles.body}>
           {formError && (
-            <div className="p-3 text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 rounded-lg">
+            <div style={{ padding: '10px', background: '#fee2e2', color: '#b91c1c', borderRadius: '6px', fontSize: '13px' }}>
               {formError}
             </div>
           )}
 
           {isEditing ? (
             /* EDIT FORM */
-            <form onSubmit={saveEdit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Subject *</label>
+            <form onSubmit={saveEdit}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={styles.inputLabel}>Subject *</label>
                 <input
                   type="text"
                   name="subject"
                   value={form.subject}
                   onChange={updateField}
                   required
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  style={styles.inputField}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={styles.formGrid}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Customer *</label>
-                  <select 
-                    name="customer" 
-                    value={form.customer} 
-                    onChange={updateField} 
-                    required
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Customer *</label>
+                  <select name="customer" value={form.customer} onChange={updateField} required style={styles.inputField}>
                     <option value="">Select customer</option>
                     {customerList.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -221,27 +313,22 @@ export default function TicketDetailProfessional({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Customer Email</label>
+                  <label style={styles.inputLabel}>Customer Email</label>
                   <input
                     type="email"
                     name="email"
                     value={form.email}
                     onChange={updateField}
                     placeholder="customer@domain.com"
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    style={styles.inputField}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={styles.formGrid}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Assignee</label>
-                  <select 
-                    name="assignee" 
-                    value={form.assignee} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Assignee</label>
+                  <select name="assignee" value={form.assignee} onChange={updateField} style={styles.inputField}>
                     {agentList.map((a) => (
                       <option key={a} value={a}>{a}</option>
                     ))}
@@ -251,13 +338,8 @@ export default function TicketDetailProfessional({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Department</label>
-                  <select 
-                    name="department" 
-                    value={form.department} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Department</label>
+                  <select name="department" value={form.department} onChange={updateField} style={styles.inputField}>
                     <option value="">Select department</option>
                     {departmentList.map((d) => (
                       <option key={d} value={d}>{d}</option>
@@ -269,15 +351,10 @@ export default function TicketDetailProfessional({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={styles.formGrid}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Team</label>
-                  <select 
-                    name="team" 
-                    value={form.team} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Team</label>
+                  <select name="team" value={form.team} onChange={updateField} style={styles.inputField}>
                     <option value="">Select team</option>
                     {teamList.map((t) => (
                       <option key={t} value={t}>{t}</option>
@@ -288,13 +365,8 @@ export default function TicketDetailProfessional({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Priority</label>
-                  <select 
-                    name="priority" 
-                    value={form.priority} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Priority</label>
+                  <select name="priority" value={form.priority} onChange={updateField} style={styles.inputField}>
                     {PRIORITY_OPTIONS.map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
@@ -302,28 +374,18 @@ export default function TicketDetailProfessional({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div style={styles.formGrid}>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Status</label>
-                  <select 
-                    name="status" 
-                    value={form.status} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>Status</label>
+                  <select name="status" value={form.status} onChange={updateField} style={styles.inputField}>
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">SLA Tier</label>
-                  <select 
-                    name="sla" 
-                    value={form.sla} 
-                    onChange={updateField}
-                    className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  >
+                  <label style={styles.inputLabel}>SLA Tier</label>
+                  <select name="sla" value={form.sla} onChange={updateField} style={styles.inputField}>
                     {SLA_OPTIONS.map((sla) => (
                       <option key={sla} value={sla}>{sla}</option>
                     ))}
@@ -331,125 +393,86 @@ export default function TicketDetailProfessional({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Description *</label>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={styles.inputLabel}>Description *</label>
                 <textarea
                   name="description"
                   rows={4}
                   value={form.description}
                   onChange={updateField}
                   required
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                  style={{ ...styles.inputField, resize: 'vertical' }}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Module</label>
-                  <input
-                    type="text"
-                    name="module"
-                    value={form.module}
-                    onChange={updateField}
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Due Date</label>
-                  <input
-                    type="text"
-                    name="dueDate"
-                    value={form.dueDate}
-                    onChange={updateField}
-                    placeholder="e.g. Tomorrow, 5:00 PM"
-                    className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Tags</label>
-                <input
-                  type="text"
-                  name="tags"
-                  value={form.tags}
-                  onChange={updateField}
-                  placeholder="Billing, Urgent, UI"
-                  className="w-full px-3.5 py-2 text-sm rounded-lg border border-slate-200"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
                 <button 
                   type="button" 
-                  className="px-4 py-2 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition"
+                  style={styles.btnSecondary} 
                   onClick={() => setIsEditing(false)}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition"
+                  style={{ ...styles.btnSecondary, backgroundColor: '#059669', color: '#ffffff', borderColor: '#059669' }}
                 >
                   Save Changes
                 </button>
               </div>
             </form>
           ) : (
-            /* MODERN VIEW DETAILS MODE */
-            <div className="space-y-6">
-              {/* Subject & Description Card */}
+            /* VIEW DETAILS MODE */
+            <>
               <div>
-                <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-2">
+                <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 10px 0' }}>
                   {ticket.subject}
                 </h2>
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px', color: '#334155', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
                   {ticket.description}
                 </div>
               </div>
 
-              {/* Modern 2-Column Metadata Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Customer</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.customer}</div>
-                  <div className="text-xs text-slate-500 truncate">{ticket.email || 'No email'}</div>
+              <div style={styles.metaGrid}>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>Customer</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.customer}</div>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>{ticket.email || 'No email'}</div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Assignee</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.assignee || 'Unassigned'}</div>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>Assignee</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.assignee || 'Unassigned'}</div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Department</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.department || 'General'}</div>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>Department</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.department || 'General'}</div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Team</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.team || 'Support'}</div>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>Team</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.team || 'Support'}</div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Module</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.module || 'Core'}</div>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>Module</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.module || 'Core'}</div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">SLA Tier</div>
-                  <div className="text-sm font-semibold text-slate-800 truncate">{ticket.sla || 'Standard'}</div>
+                <div style={styles.metaCard}>
+                  <div style={styles.inputLabel}>SLA Tier</div>
+                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '13px' }}>{ticket.sla || 'Standard'}</div>
                 </div>
               </div>
 
-              {/* Tags Section */}
               {ticket.tags && ticket.tags.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap pt-1">
-                  <span className="text-xs font-semibold text-slate-400">Tags:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>Tags:</span>
                   {ticket.tags.map((t, idx) => (
                     <span 
                       key={idx} 
-                      className="px-2.5 py-0.5 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                      style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: '#e0e7ff', color: '#4338ca', fontSize: '11px', fontWeight: '600' }}
                     >
                       {t}
                     </span>
@@ -457,8 +480,7 @@ export default function TicketDetailProfessional({
                 </div>
               )}
 
-              {/* Communication / Comments Section */}
-              <div className="pt-4 border-t border-slate-100">
+              <div style={{ marginTop: '10px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
                 <TicketCommunication 
                   ticket={ticket} 
                   onAddComment={(newComment) => {
@@ -467,7 +489,7 @@ export default function TicketDetailProfessional({
                   }} 
                 />
               </div>
-            </div>
+            </>
           )}
         </div>
       </div>
