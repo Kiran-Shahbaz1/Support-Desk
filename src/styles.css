@@ -571,6 +571,9 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .people-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* -------------------------------------------------------------
+   MOBILE OPTIMIZED CLEAN CARD LAYOUT (ZERO OVERLAP)
+   ------------------------------------------------------------- */
 @media (max-width: 760px) {
   .sidebar { width: 62px; padding: 20px 8px; }
   .brand { padding: 0 9px 30px; }
@@ -587,36 +590,88 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .breadcrumb { font-size: 10px; }
   .help-button { display: none; }
   .new-button { padding: 8px 10px; font-size: 10px; }
-  .content-wrap { padding: 25px 15px 100px; }
-  .heading-row { margin-bottom: 20px; }
-  .heading-row h1 { font-size: 23px; }
+  .content-wrap { padding: 20px 12px 100px; }
+  .heading-row { margin-bottom: 16px; }
+  .heading-row h1 { font-size: 22px; }
   .date-pill { display: none; }
-  .metrics-grid { gap: 8px; }
-  .metric-card { padding: 13px; min-height: 112px; }
-  .metric-value { font-size: 23px; }
+  .metrics-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric-card { padding: 12px; min-height: 100px; }
+  .metric-value { font-size: 22px; }
   .metric-trend span { display: block; margin: 3px 0 0; }
   .dashboard-grid, .lower-grid, .automation-layout, .reports-layout { grid-template-columns: 1fr; }
-  .panel { padding: 16px; }
-  .volume-panel { overflow: hidden; }
+  .panel { padding: 14px; }
   .donut-wrap { justify-content: center; }
-  .ticket-toolbar { flex-wrap: wrap; padding: 13px; }
-  .search-box { max-width: none; flex-basis: 100%; }
-  .ticket-toolbar .primary-button { margin-left: 0; }
-  .segmented { overflow-x: auto; }
-  .table-header, .table-row { grid-template-columns: 2fr .8fr .8fr; gap: 8px; padding: 10px; }
-  .table-header span:nth-child(4), .table-header span:nth-child(5), .table-row > .assignee, .table-row > .created { display: none; }
-  .automation-intro { padding: 5px 0 15px; }
-  .automation-intro h2 { font-size: 25px; }
-  .rule-flow { gap: 7px; }
-  .rule-flow span { font-size: 9px; padding: 8px; }
-  .people-grid { gap: 8px; }
-  .person-card { padding: 13px; }
-  .command-bar { left: calc(62px + (100% - 62px) / 2); width: calc(100% - 30px); bottom: 12px; gap: 7px; }
+  .ticket-toolbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+  .search-box { max-width: none; width: 100%; }
+  .segmented { overflow-x: auto; width: 100%; }
+  .segmented button { flex: 1; text-align: center; }
+  .ticket-toolbar .primary-button { width: 100%; margin-left: 0; text-align: center; }
+
+  /* FIX: Mobile Card Style for Tickets (No more overlap) */
+  .table-header { display: none; } /* Hide cramped headers */
+  .table-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    padding: 16px 14px !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    margin-bottom: 8px !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+  }
+
+  .ticket-cell {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+
+  .ticket-cell strong {
+    font-size: 13px !important;
+    color: #0f172a !important;
+    white-space: normal !important;
+    line-height: 1.4 !important;
+  }
+
+  .ticket-cell small {
+    font-size: 11px !important;
+    color: #64748b !important;
+  }
+
+  /* Bottom Badges in one clean, spaced row */
+  .table-row > span.priority,
+  .table-row > span.pill,
+  .table-row > span.assignee {
+    display: inline-flex !important;
+    margin: 0 !important;
+  }
+
+  /* Wrap Badges & Archive button neatly */
+  .table-row > div:last-child {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-top: 6px !important;
+    padding-top: 8px !important;
+    border-top: 1px dashed #e2e8f0 !important;
+  }
+
+  .command-bar {
+    left: calc(62px + (100% - 62px) / 2);
+    width: calc(100% - 20px);
+    bottom: 10px;
+    gap: 6px;
+    padding: 8px 10px;
+  }
   .command-label { border-right: 0; padding-right: 0; }
   .command-label small { display: none; }
-  .command-bar input { font-size: 10px; }
+  .command-bar input { font-size: 11px; }
   .command-bar kbd { display: none; }
-  .command-bar button { padding: 8px 7px; }
-  .command-bar button { font-size: 0; }
-  .command-bar button span { font-size: 12px; margin: 0; }
+  .command-bar button { padding: 6px 10px; font-size: 11px; }
+  .command-bar button span { display: none; }
 }
