@@ -574,6 +574,9 @@ h2 { font-size: 16px; margin: 0 0 4px; }
 /* -------------------------------------------------------------
    MOBILE OPTIMIZED CLEAN CARD LAYOUT (ZERO OVERLAP)
    ------------------------------------------------------------- */
+/* -------------------------------------------------------------
+   MOBILE OPTIMIZED CLEAN CARD LAYOUT (100% CONTAINED - NO OVERFLOW)
+   ------------------------------------------------------------- */
 @media (max-width: 760px) {
   .sidebar { width: 62px; padding: 20px 8px; }
   .brand { padding: 0 9px 30px; }
@@ -590,7 +593,7 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .breadcrumb { font-size: 10px; }
   .help-button { display: none; }
   .new-button { padding: 8px 10px; font-size: 10px; }
-  .content-wrap { padding: 20px 12px 100px; }
+  .content-wrap { padding: 16px 10px 100px; }
   .heading-row { margin-bottom: 16px; }
   .heading-row h1 { font-size: 22px; }
   .date-pill { display: none; }
@@ -599,7 +602,7 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .metric-value { font-size: 22px; }
   .metric-trend span { display: block; margin: 3px 0 0; }
   .dashboard-grid, .lower-grid, .automation-layout, .reports-layout { grid-template-columns: 1fr; }
-  .panel { padding: 14px; }
+  .panel { padding: 12px; }
   .donut-wrap { justify-content: center; }
   .ticket-toolbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
   .search-box { max-width: none; width: 100%; }
@@ -607,58 +610,102 @@ h2 { font-size: 16px; margin: 0 0 4px; }
   .segmented button { flex: 1; text-align: center; }
   .ticket-toolbar .primary-button { width: 100%; margin-left: 0; text-align: center; }
 
-  /* FIX: Mobile Card Style for Tickets (No more overlap) */
-  .table-header { display: none; } /* Hide cramped headers */
+  /* -------------------------------------------------------------
+     CLEAN RESPONSIVE CARDS (ZERO OVERFLOW)
+     ------------------------------------------------------------- */
+  .table-header { display: none !important; }
+  
   .table-row {
     display: flex !important;
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 10px !important;
-    padding: 16px 14px !important;
-    border-bottom: 1px solid #e2e8f0 !important;
+    gap: 8px !important;
+    padding: 14px !important;
     background: #ffffff !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 12px !important;
     border-radius: 8px !important;
     border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.03) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
+  /* Ticket Title & Customer Info */
   .ticket-cell {
     width: 100% !important;
     display: flex !important;
-    align-items: center !important;
-    gap: 12px !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .ticket-cell > span {
+    flex: 1 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
   }
 
   .ticket-cell strong {
     font-size: 13px !important;
     color: #0f172a !important;
-    white-space: normal !important;
+    white-space: normal !important; /* Wrap Title properly */
+    word-break: break-word !important;
     line-height: 1.4 !important;
+    display: block !important;
   }
 
   .ticket-cell small {
     font-size: 11px !important;
     color: #64748b !important;
+    white-space: normal !important; /* Wrap Customer & Email inside Card */
+    word-break: break-word !important;
+    line-height: 1.4 !important;
+    margin-top: 4px !important;
+    display: block !important;
   }
 
-  /* Bottom Badges in one clean, spaced row */
+  /* Priority & Status Badges */
   .table-row > span.priority,
-  .table-row > span.pill,
-  .table-row > span.assignee {
-    display: inline-flex !important;
-    margin: 0 !important;
+  .table-row > span.pill {
+    display: inline-block !important;
+    margin: 2px 0 !important;
   }
 
-  /* Wrap Badges & Archive button neatly */
+  /* Fix: Separated Assignee and Team */
+  .table-row > span.assignee {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+    margin-top: 4px !important;
+    width: 100% !important;
+  }
+
+  .table-row > span.assignee strong {
+    font-size: 11px !important;
+    color: #0f172a !important;
+  }
+
+  .table-row > span.assignee small {
+    font-size: 10px !important;
+    color: #64748b !important;
+  }
+
+  /* Card Bottom Footer: Date & Archive Button */
   .table-row > div:last-child {
     width: 100% !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
     margin-top: 6px !important;
-    padding-top: 8px !important;
+    padding-top: 10px !important;
     border-top: 1px dashed #e2e8f0 !important;
+  }
+
+  .table-row > div:last-child .created {
+    font-size: 10px !important;
+    color: #64748b !important;
   }
 
   .command-bar {
