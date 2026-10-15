@@ -1,11 +1,20 @@
-// Aakhir se '/' hata dein
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:4000/api/v1' : '/api/v1')
+// Production-Ready Dynamic API Base
+// 1. Agar .env mein VITE_API_URL set hai toh wo use hoga
+// 2. Local development par http://localhost:5001 use hoga (jo server chal raha hai)
+// 3. Live server par automatically relative domain (/api/v1) use hoga
+const ENV_URL = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
+const IS_LOCAL = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+const API_BASE = ENV_URL 
+  ? (ENV_URL.endsWith('/api/v1') ? ENV_URL : `${ENV_URL}/api/v1`)
+  : (IS_LOCAL ? 'http://localhost:5001/api/v1' : '/api/v1')
+
+const ROOT_URL = API_BASE.replace(/\/api\/v1\/?$/, '')
+
 async function request(endpoint, options = {}) {
-  // Agar endpoint ke shuru mein '/' nahi hai, toh khud add kar dega
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE}${cleanEndpoint}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+  const url = `${API_BASE}${cleanEndpoint}`
   
-  // Baaki ka code waisa hi rahega...
   const config = {
     headers: {
       'Content-Type': 'application/json',
@@ -13,6 +22,7 @@ async function request(endpoint, options = {}) {
     },
     ...options,
   }
+
   if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
     config.body = JSON.stringify(config.body)
   }
@@ -35,7 +45,7 @@ async function request(endpoint, options = {}) {
 
 export const api = {
   // Health
-  checkHealth: () => fetch('http://localhost:4000/health').then((r) => r.json()).catch(() => null),
+  checkHealth: () => fetch(`${ROOT_URL}/health`).then((r) => r.json()).catch(() => null),
 
   // Tickets
   getTickets: (query = '') => {

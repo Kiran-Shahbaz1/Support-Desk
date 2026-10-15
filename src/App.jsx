@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import Dashboard from './Dashboard'
 import ManagementPages from './ManagementPages'
@@ -101,9 +100,18 @@ function ticketMatchesQuery(ticket, input) {
 function App() {
   const location = useLocation()
   const navigate = useNavigate()
+
+  // Dynamic View Detection
   const activeView = location.pathname === '/tickets/new'
     ? 'Create Ticket'
     : navigationItems.find((item) => item.path === location.pathname)?.view || (location.pathname.startsWith('/tickets') ? 'Tickets' : 'Overview')
+
+  const [currentView, setCurrentView] = useState(activeView)
+  useEffect(() => { 
+    setCurrentView(activeView) 
+  }, [location.pathname, activeView])
+
+  const viewToRender = currentView || activeView
 
   // Live Shared State across all pages
   const [tickets, setTickets] = useLocalStorageState('relay:tickets', initialTickets.map(enrichTicket))
@@ -113,11 +121,8 @@ function App() {
   const [departments, setDepartments] = useLocalStorageState('relay:departments', initialDepartments || [])
   const [activityLog, setActivityLog] = useLocalStorageState('relay:activity', [])
   const [storedAutomationRules, setAutomationRules] = useLocalStorageState('relay:automation-rules', initialAutomationRules)
-  const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 0)
+  const [automationSchemaVersion, setAutomationSchemaVersion] = useLocalStorageState('relay:automation-schema-version', 1)
 
-  // -------------------------------------------------------------
-  // DYNAMIC LIVE OPTIONS FOR DROPDOWNS (Never Empty, Strictly Live)
-  // -------------------------------------------------------------
   const availableCustomers = useMemo(() => {
     const fromState = (customers || []).map((c) => (typeof c === 'string' ? c : c?.name)).filter(Boolean)
     if (fromState.length > 0) return [...new Set(fromState)]
@@ -144,19 +149,28 @@ function App() {
     return ['Core support', 'Finance support', 'Data support', 'Leadership', 'Enterprise']
   }, [teams])
 
-  const automationRules = useMemo(() => storedAutomationRules.map((rule) => {
-    const wasMisclassifiedSlaRule = automationSchemaVersion < 1 && rule.id === 'rule-sla' && rule.name === 'SLA risk alert' && rule.triggerType === 'sla-under-hour' && rule.actionType === 'assign-manager' && rule.action === 'Assign to Kiran Shah'
-    return normalizeAutomationRule(wasMisclassifiedSlaRule ? { ...rule, actionType: 'notify-assignee', action: 'Notify assignee and manager' } : rule)
-  }), [storedAutomationRules, automationSchemaVersion])
+  // Normalization with sanity auto-reset for looping run counts (> 500 reset to 0)
+  const automationRules = useMemo(() => {
+    return (storedAutomationRules || []).map((rule) => {
+      const normalized = normalizeAutomationRule(rule)
+      if (normalized && normalized.runs > 500) {
+        normalized.runs = 0
+      }
+      return normalized
+    })
+  }, [storedAutomationRules])
 
   const [query, setQuery] = useState('')
   const [command, setCommand] = useState('')
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState('success')
   const [isCommandRunning, setIsCommandRunning] = useState(false)
-  const showCreate = location.pathname === '/tickets/new'
+  const showCreate = location.pathname === '/tickets/new' || viewToRender === 'Create Ticket'
   const setShowCreate = (visible) => {
-    if (!visible && location.pathname === '/tickets/new') navigate('/tickets')
+    if (!visible) {
+      if (location.pathname === '/tickets/new') navigate('/tickets')
+      setCurrentView('Tickets')
+    }
   }
   const [formError, setFormError] = useState('')
   const [ticketForm, setTicketForm] = useState({ 
@@ -182,7 +196,6 @@ function App() {
   const [showArchived, setShowArchived] = useState(false)
   const [selectedTicketId, setSelectedTicketId] = useState(null)
 
-  // Entity intake modal state
   const [entityModal, setEntityModal] = useState({
     isOpen: false,
     type: '',
@@ -213,15 +226,62 @@ function App() {
     }
   }
 
+  // -------------------------------------------------------------
+  // CONTINUOUS 100% AUTOMATED ENGINE (Loop-Proof Heartbeat)
+  // -------------------------------------------------------------
+  const automationRulesRef = useRef(automationRules)
+  useEffect(() => {
+    automationRulesRef.current = automationRules
+  }, [automationRules])
+
+  useEffect(() => {
+    const executeAutomations = () => {
+      const currentRules = automationRulesRef.current
+      if (!currentRules || currentRules.length === 0) return
+
+      setTickets((currentTickets) => {
+        if (!currentTickets || currentTickets.length === 0) return currentTickets
+
+        const result = runAutomationRules(currentTickets, currentRules)
+
+        if (!result.events || result.events.length === 0) {
+          return currentTickets
+        }
+
+        setAutomationRules(result.rules)
+
+        setTimeout(() => {
+          result.events.forEach((ev) => {
+            const desc = typeof ev === 'string' ? ev : (ev.description || ev.ruleTitle || 'Automation applied')
+            recordActivity(desc)
+          })
+        }, 0)
+
+        result.tickets.forEach((t) => {
+          const original = currentTickets.find((o) => o.id === t.id)
+          if (original && (original.assignee !== t.assignee || original.status !== t.status || JSON.stringify(original.tags) !== JSON.stringify(t.tags))) {
+            api.updateTicket(t.id, { assignee: t.assignee, status: t.status, tags: t.tags }).catch(() => {})
+          }
+        })
+
+        return result.tickets
+      })
+    }
+
+    const autoInterval = window.setInterval(executeAutomations, 8000)
+    executeAutomations()
+
+    return () => window.clearInterval(autoInterval)
+  }, [])
+
   // Real-time Database and Cross-Page Sync
   useEffect(() => {
     let active = true
     const syncFromDatabase = async () => {
       try {
-        const [ticketRes, actRes, rulesRes, userRes, custRes, agentRes, teamRes, deptRes] = await Promise.all([
+        const [ticketRes, actRes, userRes, custRes, agentRes, teamRes, deptRes] = await Promise.all([
           api.getTickets().catch(() => null),
           api.getActivity().catch(() => null),
-          api.getAutomations().catch(() => null),
           api.getCurrentUser().catch(() => null),
           api.getCustomers().catch(() => null),
           api.getAgents().catch(() => null),
@@ -238,7 +298,6 @@ function App() {
           }
         }
         if (actRes && Array.isArray(actRes) && actRes.length > 0) setActivityLog(actRes)
-        if (rulesRes && Array.isArray(rulesRes) && rulesRes.length > 0) setAutomationRules(rulesRes.map(normalizeAutomationRule))
         if (custRes && Array.isArray(custRes) && custRes.length > 0) setCustomers(custRes)
         if (agentRes && Array.isArray(agentRes) && agentRes.length > 0) setAgents(agentRes)
         if (teamRes && Array.isArray(teamRes) && teamRes.length > 0) setTeams(teamRes)
@@ -250,42 +309,20 @@ function App() {
     }
 
     syncFromDatabase()
-    const syncInterval = window.setInterval(syncFromDatabase, 4000)
+    const syncInterval = window.setInterval(syncFromDatabase, 10000)
 
     const onDataChanged = () => syncFromDatabase()
     window.addEventListener('storage', onDataChanged)
-    window.addEventListener('relay:data-updated', onDataChanged)
 
     return () => {
       active = false
       window.clearInterval(syncInterval)
       window.removeEventListener('storage', onDataChanged)
-      window.removeEventListener('relay:data-updated', onDataChanged)
     }
   }, [])
 
-  // -------------------------------------------------------------
-  // CONTINUOUS 24/7 BACKGROUND AUTOMATION (Heartbeat for SLAs & Rules)
-  // -------------------------------------------------------------
-  useEffect(() => {
-    const autoInterval = window.setInterval(() => {
-      setTickets((currentTickets) => {
-        if (!currentTickets || currentTickets.length === 0) return currentTickets
-        const result = runAutomationRules(currentTickets, automationRules)
-        if (result.events && result.events.length > 0) {
-          result.events.forEach(recordActivity)
-          setAutomationRules(result.rules)
-          window.dispatchEvent(new Event('relay:data-updated'))
-          return result.tickets
-        }
-        return currentTickets
-      })
-    }, 15000)
-
-    return () => window.clearInterval(autoInterval)
-  }, [automationRules])
-
   const goToView = (view) => {
+    setCurrentView(view)
     const target = navigationItems.find((item) => item.view === view)
     if (target && location.pathname !== target.path) navigate(target.path)
   }
@@ -306,16 +343,16 @@ function App() {
   const saveTickets = (nextTickets) => {
     const enrichedTickets = nextTickets.map(enrichTicket)
     setTickets(enrichedTickets)
-    window.dispatchEvent(new Event('relay:data-updated'))
   }
 
   const saveWithAutomation = (nextTickets, ticketIds) => {
-    const result = runAutomationRules(nextTickets, automationRules, { ticketIds })
+    const result = runAutomationRules(nextTickets, automationRulesRef.current, { ticketIds })
     saveTickets(result.tickets)
-    setAutomationRules(result.rules)
-    result.events.forEach(recordActivity)
-    if (result.events.length) setNotice(result.events.join('. '))
-    window.dispatchEvent(new Event('relay:data-updated'))
+    if (result.events && result.events.length > 0) {
+      setAutomationRules(result.rules)
+      result.events.forEach((ev) => recordActivity(typeof ev === 'string' ? ev : ev.description))
+      setNotice(result.events.map(e => typeof e === 'string' ? e : e.description).join('. '))
+    }
     return result
   }
 
@@ -328,12 +365,10 @@ function App() {
         setNotice(message)
       }
       api.deleteTicket(ticketId).catch(() => {})
-      window.dispatchEvent(new Event('relay:data-updated'))
       return
     }
     api.updateTicket(ticketId, changes).catch(() => {})
     
-    // Reset previous runs on priority change so new matching rules can fire instantly
     const updatedList = tickets.map((ticket) => {
       if (ticket.id !== ticketId) return ticket
       const isPriorityChanged = changes.priority && changes.priority !== ticket.priority
@@ -347,8 +382,7 @@ function App() {
 
     const result = saveWithAutomation(updatedList, [ticketId])
     recordActivity(message)
-    setNotice([message, ...result.events].join('. '))
-    window.dispatchEvent(new Event('relay:data-updated'))
+    setNotice([message, ...(result.events || []).map(e => typeof e === 'string' ? e : e.description)].join('. '))
   }
 
   const toggleArchiveTicket = (ticketId) => {
@@ -392,7 +426,6 @@ function App() {
       recordActivity(`Created new ${entityModal.type}: ${entityModal.name}`)
       setNotice(`${entityModal.type} "${entityModal.name}" created successfully.`)
       setNoticeTone('success')
-      window.dispatchEvent(new Event('relay:data-updated'))
     } catch (err) {
       if (entityModal.type === 'Agent') setAgents((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
       else if (entityModal.type === 'Customer') setCustomers((prev) => [newObj, ...(Array.isArray(prev) ? prev : [])])
@@ -401,7 +434,6 @@ function App() {
       recordActivity(`Created new ${entityModal.type}: ${entityModal.name} (locally)`)
       setNotice(`${entityModal.type} "${entityModal.name}" created.`)
       setNoticeTone('success')
-      window.dispatchEvent(new Event('relay:data-updated'))
     }
     setEntityModal({ isOpen: false, type: '', name: '', email: '', role: 'Support agent', department: 'Core support', team: 'Core support' })
   }
@@ -414,6 +446,7 @@ function App() {
     const lower = raw.toLowerCase()
 
     if (/^(?:create|new|add)\s+ticket/i.test(lower)) {
+      setCurrentView('Create Ticket')
       navigate('/tickets/new')
       setCommand('')
       setIsCommandRunning(false)
@@ -459,7 +492,6 @@ function App() {
       } else {
         setNoticeTone('success')
       }
-      window.dispatchEvent(new Event('relay:data-updated'))
     } catch (err) {
       setNoticeTone('error')
       setNotice(err.message || 'Error executing command')
@@ -515,7 +547,6 @@ function App() {
     setTicketForm({ subject: '', customer: availableCustomers[0] || 'Maya Chen', email: 'maya.chen@acme.co', description: '', module: 'General', category: 'General inquiry', priority: 'High', assignee: 'Unassigned', department: 'Core support', team: 'Core support', tags: '', dueDate: '', sla: 'Standard', internalNotes: '', attachments: '' })
     goToView('Tickets')
     setNotice(`Ticket created and synchronized with database.`)
-    window.dispatchEvent(new Event('relay:data-updated'))
   }
 
   const openTicketSearch = (search = '') => {
@@ -523,7 +554,7 @@ function App() {
     setFilter('All')
     setPriorityFilter('All')
     setAssigneeFilter('All')
-    navigate('/tickets')
+    goToView('Tickets')
   }
 
   const recordManagementActivity = (action) => {
@@ -532,25 +563,77 @@ function App() {
   }
 
   const runAutomationNow = () => {
-    const result = runAutomationRules(tickets, automationRules)
-    if (!result.events.length) {
-      setNotice('No active automation rules matched any unprocessed tickets.')
+    const result = runAutomationRules(tickets, automationRulesRef.current)
+    if (!result.events || !result.events.length) {
+      setNotice('All active rules have already processed current tickets.')
       return
     }
     saveTickets(result.tickets)
     setAutomationRules(result.rules)
-    result.events.forEach(recordActivity)
-    const actionCount = result.events.filter((event) => event.includes('applied to ticket #')).length
-    setNotice(`Automation completed: ${actionCount} action(s) applied.`)
-    window.dispatchEvent(new Event('relay:data-updated'))
+    result.events.forEach((ev) => recordActivity(typeof ev === 'string' ? ev : ev.description))
+    setNotice(`Automation completed: ${result.events.length} action(s) applied.`)
   }
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">T</span><span>Ticket<span className="brand-dot"> Desk</span></span></div>
-        <div className="workspace-switcher"><span className="workspace-avatar">T</span><span><strong>Ticket Management</strong><small>Support workspace</small></span><span className="chevron">⌄</span></div>
-        <nav className="sidebar-navigation">{navigationGroups.map((group) => <div className="nav-group" key={group.label}><p className="eyebrow">{group.label}</p>{group.items.map((item) => <button className={`nav-item ${location.pathname === item.path || (item.path === '/tickets' && location.pathname.startsWith('/tickets')) ? 'active' : ''}`} onClick={() => item.path === '/tickets/new' ? navigate('/tickets/new') : navigate(item.path)} key={item.path}><span className="nav-icon">{item.icon}</span>{item.label}{item.label === 'Tickets' && <span className="nav-count">{tickets.length}</span>}</button>)}</div>)}</nav>
+        {/* Modern Enterprise Brand & Logo */}
+        <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span className="brand-mark" style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+            boxShadow: '0 2px 8px rgba(37,99,235,0.35)',
+            color: '#ffffff',
+            flexShrink: 0
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </span>
+          <span style={{ fontWeight: '700', fontSize: '1.05rem', letterSpacing: '-0.3px' }}>
+            Digitalsoft<span className="brand-dot" style={{ color: '#2563eb' }}> Desk</span>
+          </span>
+        </div>
+
+        <div className="workspace-switcher">
+          <span className="workspace-avatar" style={{ background: '#2563eb', color: '#fff', fontWeight: 'bold' }}>D</span>
+          <span><strong>Digital Support Desk</strong><small>Enterprise workspace</small></span>
+          <span className="chevron">⌄</span>
+        </div>
+
+        <nav className="sidebar-navigation">
+          {navigationGroups.map((group) => (
+            <div className="nav-group" key={group.label}>
+              <p className="eyebrow">{group.label}</p>
+              {group.items.map((item) => (
+                <button
+                  className={`nav-item ${viewToRender === item.view ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedTicketId(null)
+                    setQuery('')
+                    setCurrentView(item.view)
+                    if (item.path === '/tickets/new') {
+                      navigate('/tickets/new')
+                    } else {
+                      navigate(item.path)
+                    }
+                  }}
+                  key={item.path}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  {item.label}
+                  {item.label === 'Tickets' && <span className="nav-count">{tickets.length}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
         <div className="sidebar-bottom">
           <div className="upgrade-card"><span className="spark">✦</span><strong>Unlock command mode</strong><p>Automate triage and resolve tickets faster.</p><button onClick={() => setNotice('Command mode is already enabled in this demo.')}>Explore AI tools <span>→</span></button></div>
           <div className="profile"><span className="profile-avatar">WA</span><span><strong>Workspace administrator</strong><small>Administrator</small></span><span className="more">•••</span></div>
@@ -578,13 +661,13 @@ function App() {
             >
               ← Back
             </button>
-            <span>Workspace</span><b>/</b><strong>{activeView}</strong>
+            <span>Workspace</span><b>/</b><strong>{viewToRender}</strong>
           </div>
 
           <div className="top-actions">
             <button className="icon-button" onClick={() => setNotice('You are all caught up.')} title="Notifications">♧<span className="notification-dot" /></button>
             <button className="help-button" onClick={() => navigate('/knowledge-base')} title="Knowledge Base & Help Center">?</button>
-            <button className="new-button" onClick={() => navigate('/tickets/new')}><span>+</span> New ticket</button>
+            <button className="new-button" onClick={() => { setCurrentView('Create Ticket'); navigate('/tickets/new'); }}><span>+</span> New ticket</button>
           </div>
         </header>
 
@@ -594,11 +677,10 @@ function App() {
               <p className="overline">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
-              <h1>{activeView === 'Overview' ? 'Support operations overview' : activeView}</h1>
-              <p className="subheading">{activeView === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${activeView.toLowerCase()} from one calm, focused workspace.`}</p>
+              <h1>{viewToRender === 'Overview' ? 'Support operations overview' : viewToRender}</h1>
+              <p className="subheading">{viewToRender === 'Overview' ? 'Monitor service health, team workload, and customer requests from one workspace.' : `Manage your ${viewToRender.toLowerCase()} from one calm, focused workspace.`}</p>
             </div>
             
-            {/* Live Interactive Date Range Selector */}
             <select
               className="date-pill"
               defaultValue="Last 30 days"
@@ -627,10 +709,10 @@ function App() {
           </div>
 
           {notice && <div className={`notice notice-${noticeTone}`}><span>{noticeTone === 'success' ? '✓' : '!'}</span>{notice}<button onClick={() => setNotice('')}>×</button></div>}
-          {activeView === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => navigate('/tickets')} />}
           
-          {/* Live Interactive Archive Toggle */}
-          {activeView === 'Tickets' && (
+          {viewToRender === 'Overview' && <Dashboard tickets={tickets} activityLog={activityLog} onOpenTickets={() => goToView('Tickets')} />}
+          
+          {viewToRender === 'Tickets' && (
             <label className="archived-toggle" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', margin: '10px 0', fontWeight: '600' }}>
               <input
                 type="checkbox"
@@ -644,7 +726,7 @@ function App() {
             </label>
           )}
 
-          {activeView === 'Tickets' && (
+          {viewToRender === 'Tickets' && (
             <TicketView
               tickets={filteredTickets}
               query={query}
@@ -656,15 +738,26 @@ function App() {
               assigneeFilter={assigneeFilter}
               setAssigneeFilter={setAssigneeFilter}
               onSelect={setSelectedTicketId}
-              onCreate={() => navigate('/tickets/new')}
+              onCreate={() => { setCurrentView('Create Ticket'); navigate('/tickets/new'); }}
               onToggleArchive={toggleArchiveTicket}
             />
           )}
 
-          {activeView === 'Automation' && <AutomationPage rules={automationRules} setRules={setAutomationRules} onActivity={recordManagementActivity} onRunRules={runAutomationNow} />}
+          {viewToRender === 'Automation' && (
+            <AutomationPage 
+              rules={automationRules} 
+              setRules={(newRules) => {
+                setAutomationRules(newRules)
+                try {
+                  localStorage.setItem('relay:automation-rules', JSON.stringify(newRules))
+                } catch (e) {}
+              }} 
+              onActivity={recordManagementActivity} 
+              onRunRules={runAutomationNow} 
+            />
+          )}
           
-          {/* Real-time Connected Reports Page */}
-          {activeView === 'Reports' && (
+          {viewToRender === 'Reports' && (
             <ReportsPage
               tickets={tickets}
               customers={customers}
@@ -678,8 +771,7 @@ function App() {
             />
           )}
 
-          {/* Dedicated Professional Settings Page */}
-          {activeView === 'Settings' && (
+          {viewToRender === 'Settings' && (
             <SettingsView
               tickets={tickets}
               onNotice={setNotice}
@@ -687,10 +779,9 @@ function App() {
             />
           )}
 
-          {/* Management Pages for other workspace views */}
-          {['Customers', 'Agents', 'Teams', 'Departments', 'Knowledge Base', 'Notifications', 'AI Assistant', 'Admin'].includes(activeView) && (
+          {['Customers', 'Agents', 'Teams', 'Departments', 'Knowledge Base', 'Notifications', 'AI Assistant', 'Admin'].includes(viewToRender) && (
             <ManagementPages
-              view={activeView}
+              view={viewToRender}
               tickets={tickets}
               activityLog={activityLog}
               onNotice={setNotice}
@@ -703,7 +794,6 @@ function App() {
 
       <div className="command-bar"><div className="command-label"><span className="command-symbol">✦</span><strong>AI Command Box</strong><small>Workspace actions</small></div><input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && runCommand()} placeholder={'e.g. create agent, total customers, or show open tickets'} /><kbd>Enter</kbd><button onClick={runCommand} disabled={isCommandRunning || !command.trim()}>{isCommandRunning ? <><span className="command-spinner" />Running...</> : <>Run command <span>↗</span></>}</button></div>
       
-      {/* Drawer with dynamic Dropdowns passed & strictly live */}
       {selectedTicket && (
         <TicketDetailProfessional 
           ticket={selectedTicket} 
@@ -717,9 +807,6 @@ function App() {
         />
       )}
       
-      {/* ------------------------------------------------------------- */}
-      {/* NEW TICKET MODAL WITH 100% RELATIONAL ENTITY DROPDOWNS       */}
-      {/* ------------------------------------------------------------- */}
       {showCreate && (
         <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
           <div className="modal expanded-ticket-form" onClick={(event) => event.stopPropagation()}>
@@ -744,7 +831,6 @@ function App() {
                 />
               </label>
 
-              {/* 1. CUSTOMER DROPDOWN */}
               <label>
                 Customer *
                 <select
@@ -820,7 +906,6 @@ function App() {
             </div>
 
             <div className="form-row">
-              {/* 2. ASSIGNED AGENT DROPDOWN */}
               <label>
                 Assigned agent
                 <select 
@@ -834,7 +919,6 @@ function App() {
                 </select>
               </label>
 
-              {/* 3. DEPARTMENT DROPDOWN */}
               <label>
                 Department
                 <select 
@@ -850,7 +934,6 @@ function App() {
             </div>
 
             <div className="form-row">
-              {/* 4. TEAM DROPDOWN */}
               <label>
                 Team
                 <select 
@@ -1031,9 +1114,6 @@ function App() {
   )
 }
 
-// -------------------------------------------------------------
-// SETTINGS VIEW
-// -------------------------------------------------------------
 function SettingsView({ tickets = [], onNotice, onActivity }) {
   const [settings, setSettings] = useState({
     workspaceName: 'Ticket Desk Operations',
@@ -1079,8 +1159,6 @@ function SettingsView({ tickets = [], onNotice, onActivity }) {
 
     try {
       localStorage.setItem('relay:settings', JSON.stringify(settings))
-      window.dispatchEvent(new Event('relay:settings-updated'))
-      window.dispatchEvent(new Event('relay:data-updated'))
       if (onActivity) onActivity('Updated workspace settings and synchronized with backend')
       if (onNotice) onNotice('Workspace settings saved and synchronized successfully.')
       setSaveStatus('success')
@@ -1412,7 +1490,6 @@ function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilte
           <span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority}</span>
           <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
           
-          {/* OWNERSHIP COLUMN WITH CLEAN SEPARATE LINES */}
           <span className="assignee">
             <strong style={{ display: 'block' }}>{ticket.assignee}</strong>
             <small style={{ display: 'block', color: '#64748b', marginTop: '2px' }}>{ticket.team} · {ticket.department}</small>
@@ -1448,12 +1525,5 @@ function TicketView({ tickets, query, setQuery, filter, setFilter, priorityFilte
     </section>
   ) 
 }
-
-function TicketDetail({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'] }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Assignee</small><strong>{ticket.assignee}</strong><span>{ticket.department}</span></div><div><small>SLA due</small><strong>{ticket.sla}</strong><span>{ticket.dueDate}</span></div><div><small>Module</small><strong>{ticket.module}</strong><span>{ticket.tags.join(' · ')}</span></div></div><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add an internal note or customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section></aside></div> }
-function TicketDetailAdvanced({ ticket, onClose, onUpdate }) { const [comment, setComment] = useState(''); const addComment = () => { if (!comment.trim()) return; onUpdate(ticket.id, { comments: [...ticket.comments, comment.trim()], history: [...ticket.history, 'Comment added by Workspace administrator'], updatedDate: new Date().toLocaleString() }, `Comment added to ticket #${ticket.id}`); setComment('') }; return <div className="drawer-backdrop" onClick={onClose}><aside className="ticket-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="overline">Ticket #{ticket.id}</p><h2>{ticket.subject}</h2></div><button className="close-button" onClick={onClose}>×</button></div><div className="drawer-badges"><span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span><span className={`priority ${ticket.priority.toLowerCase()}`}>{ticket.priority} priority</span><span className="channel-badge">{ticket.channel}</span></div><p className="drawer-description">{ticket.description}</p><div className="detail-grid"><div><small>Customer</small><strong>{ticket.customer}</strong><span>{ticket.email}</span></div><div><small>Ticket ID</small><strong>#{ticket.id}</strong><span>Created: {ticket.createdDate}</span></div><div><small>Module / category</small><strong>{ticket.module}</strong><span>{ticket.category}</span></div><div><small>Ownership</small><strong>{ticket.assignee}</strong><span>{ticket.team} · {ticket.department}</span></div><div><small>Due date / SLA</small><strong>{ticket.dueDate}</strong><span>{ticket.sla}</span></div><div><small>Updated</small><strong>{ticket.updatedDate}</strong><span>{ticket.tags.join(' · ') || 'No tags'}</span></div></div><section className="drawer-section"><h3>Attachments</h3>{ticket.attachments.length ? ticket.attachments.map((file) => <div className="attachment-item" key={file}>📎 {file}</div>) : <p className="muted-copy">No attachments added.</p>}</section><div className="drawer-controls"><label>Status<select value={ticket.status} onChange={(event) => onUpdate(ticket.id, { status: event.target.value, sla: event.target.value === 'Resolved' ? 'Closed' : ticket.sla, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} status changed to ${event.target.value}`)}><option>Open</option><option>Pending</option><option>Resolved</option></select></label><label>Priority<select value={ticket.priority} onChange={(event) => onUpdate(ticket.id, { priority: event.target.value, updatedDate: new Date().toLocaleString() }, `Ticket #${ticket.id} priority changed to ${event.target.value}`)}><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label></div><section className="drawer-section"><h3>Comments</h3>{ticket.comments.map((item, index) => <div className="comment-item" key={`${item}-${index}`}>{item}<small>Workspace administrator</small></div>)}<div className="comment-box"><textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a customer reply..." /><button className="primary-button" onClick={addComment}>Add comment</button></div></section><section className="drawer-section"><h3>Internal notes</h3>{ticket.internalNotes.length ? ticket.internalNotes.map((item, index) => <div className="comment-item internal-note" key={`${item}-${index}`}>{item}<small>Visible to agents only</small></div>) : <p className="muted-copy">No internal notes added.</p>}</section><section className="drawer-section"><h3>Activity history</h3>{ticket.history.length ? ticket.history.map((item, index) => <div className="history-item" key={`${item}-${index}`}><span>•</span>{item}</div>) : <p className="muted-copy">No activity recorded yet.</p>}</section></aside></div> }
-function Automation({ onNotice }) { const rules = [{ name: 'Escalate critical tickets', trigger: 'Priority is Critical', action: 'Assign to Support Manager + notify', status: 'Active', runs: '18 runs' }, { name: 'SLA risk alert', trigger: 'Less than 60 minutes remaining', action: 'Notify assignee + manager', status: 'Active', runs: '42 runs' }, { name: 'Close resolved tickets', trigger: 'Status is Resolved for 7 days', action: 'Archive ticket', status: 'Paused', runs: '8 runs' }]; return <div className="automation-layout"><div className="automation-intro"><p className="overline">Operations engine</p><h2>Rules that keep work moving.</h2><p>Build trigger, condition, and action flows that handle the repetitive work before it reaches your team.</p><button className="primary-button" onClick={() => onNotice('Rule builder opened. Connect a trigger to begin.')}>+ Create automation</button></div><div className="rule-list">{rules.map((rule) => <div className="rule-card" key={rule.name}><div className="rule-top"><span className={`rule-status ${rule.status.toLowerCase()}`} /> <strong>{rule.name}</strong><button className="more-button">•••</button></div><div className="rule-flow"><span><small>WHEN</small>{rule.trigger}</span><b>→</b><span><small>THEN</small>{rule.action}</span></div><div className="rule-footer"><span className={`pill ${rule.status.toLowerCase()}`}>{rule.status}</span><small>{rule.runs} this month</small></div></div>)}</div></div> }
-function People() { const people = [{ name: 'Kiran Shah', role: 'Administrator', team: 'Leadership', load: '8 tickets', initials: 'KS' }, { name: 'Ahmed Khan', role: 'Support agent', team: 'Core support', load: '12 tickets', initials: 'AK' }, { name: 'Sara Davis', role: 'Support agent', team: 'Enterprise', load: '7 tickets', initials: 'SD' }, { name: 'Maya Patel', role: 'Manager', team: 'Leadership', load: '4 tickets', initials: 'MP' }]; return <section className="panel people-panel"><div className="panel-heading"><div><h2>People & permissions</h2><p>Manage access, teams, and workload across the workspace.</p></div><button className="primary-button">+ Invite member</button></div><div className="people-grid">{people.map((person) => <div className="person-card" key={person.name}><span className="avatar large">{person.initials}</span><strong>{person.name}</strong><span>{person.role}</span><small>{person.team} · {person.load}</small><button>Manage access <span>→</span></button></div>)}</div></section> }
-function Reports() { return <div className="reports-layout"><section className="panel report-feature"><p className="overline">Monthly service report</p><h2>September was your fastest month yet.</h2><p>Resolution time fell by 16% while customer satisfaction held steady at <strong>4.8/5</strong>.</p><div className="report-bars"><span style={{ height: '42%' }} /><span style={{ height: '58%' }} /><span style={{ height: '50%' }} /><span style={{ height: '72%' }} /><span style={{ height: '66%' }} /><span style={{ height: '90%' }} /><span style={{ height: '82%' }} /></div><div className="bar-labels"><span>W1</span><span>W2</span><span>W3</span><span>W4</span></div></section><div className="report-side"><Metric label="CSAT score" value="4.8/5" trend="4.1%" tone="green" detail="above target" /><Metric label="Tickets resolved" value="186" trend="16.8%" tone="green" detail="vs. previous period" /><button className="export-button">↓ Export full report <span>PDF · CSV · XLSX</span></button></div></div> }
-function ManagementPlaceholder({ title }) { return <section className="panel management-placeholder"><div className="placeholder-icon">✦</div><p className="overline">Workspace module</p><h2>{title}</h2><p>This section is route-ready and prepared for its dedicated workflow. Existing ticket operations remain available from the Tickets section.</p><span className="pill active">Coming next</span></section> }
 
 export default App
