@@ -3,6 +3,9 @@ import express from 'express'
 import { rateLimit } from 'express-rate-limit'
 import helmet from 'helmet'
 import morgan from 'morgan'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { corsOrigins, env } from './config/env.js'
 import { prisma } from './database/client.js'
 import AgentController from './controllers/AgentController.js'
@@ -33,6 +36,9 @@ import ReportService from './services/ReportService.js'
 import TicketService from './services/TicketService.js'
 import HttpError from './utils/HttpError.js'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 export function createApp({ prismaClient = prisma, database, services = {}, logger = env.NODE_ENV !== 'test' } = {}) {
   const client = database || prismaClient
   const app = express()
@@ -40,28 +46,38 @@ export function createApp({ prismaClient = prisma, database, services = {}, logg
   app.locals.prisma = client
 
   app.use(requestId)
-  app.use(helmet({ crossOriginResourcePolicy: false }))
-    app.use(cors({
+  app.use(helmet({ 
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false
+  }))
+
+  const allowedOriginsList = Array.isArray(corsOrigins)
+    ? corsOrigins
+    : typeof corsOrigins === 'string'
+      ? corsOrigins.split(',').map(s => s.trim())
+      : []
+
+  app.use(cors({
     origin(origin, callback) {
-      if (!origin || corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+      if (
+        !origin ||
+        allowedOriginsList.includes('*') ||
+        allowedOriginsList.includes(origin) ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      ) {
         return callback(null, true)
       }
       return callback(new HttpError(403, 'CORS_ORIGIN_DENIED'))
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'x-workspace-id'],
   }))
+
   app.use(express.json({ limit: '10mb' }))
   if (logger) app.use(morgan('dev'))
 
-  app.get('/', (_request, response) => response.json({
-    name: 'Support Desk API',
-    version: '1.0.0',
-    status: 'running',
-    health: '/health',
-    api: '/api/v1',
-  }))
   app.get('/health', (_request, response) => response.json({ status: 'ok' }))
   app.use('/api/v1', rateLimit({ windowMs: env.RATE_LIMIT_WINDOW_MS, limit: env.RATE_LIMIT_MAX, standardHeaders: true, legacyHeaders: false }))
 
@@ -75,7 +91,7 @@ export function createApp({ prismaClient = prisma, database, services = {}, logg
   const automationController = new AutomationController(client)
   const workspaceController = new WorkspaceController(client)
 
-  // Module routes
+  // API Routes
   app.use('/api/v1/tickets', ticketRoutes(new TicketController(ticketService)))
   app.use('/api/v1/customers', customerRoutes(new CustomerController(customerService)))
   app.use('/api/v1/reports', reportRoutes(new ReportController(reportService)))
@@ -96,7 +112,33 @@ export function createApp({ prismaClient = prisma, database, services = {}, logg
   app.post('/api/v1/auth/logout', workspaceController.logout)
   app.post('/api/v1/tickets/:id/attachments', workspaceController.addAttachment)
 
-  app.use(notFound)
+  // ========================================================
+  // SERVE FRONTEND (DIST FOLDER - EXPRESS V5 COMPATIBLE)
+  // ========================================================
+  const potentialDistPaths = [
+    path.resolve(__dirname, '../../dist'),
+    path.resolve(__dirname, '../../client/dist'),
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, '../dist')
+  ]
+
+  const activeDist = potentialDistPaths.find(p => fs.existsSync(p))
+
+  if (activeDist) {
+    console.log(`✓ Production Frontend connected from: ${activeDist}`)
+    app.use(express.static(activeDist))
+
+    // Express v5 compatible Catch-All middleware
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next()
+      }
+      res.sendFile(path.join(activeDist, 'index.html'))
+    })
+  } else {
+    app.use(notFound)
+  }
+
   app.use(errorHandler)
   return app
 }

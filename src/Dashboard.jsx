@@ -1,3 +1,5 @@
+import React from 'react'
+
 function formatTimeAgo(createdString, createdDate) {
   const targetDate = createdDate ? new Date(createdDate) : null
   if (!targetDate || isNaN(targetDate.getTime())) {
@@ -13,6 +15,7 @@ function formatTimeAgo(createdString, createdDate) {
   if (days === 1) return 'Yesterday'
   return `${days}d ago`
 }
+
 const statusColors = { Open: 'orange', Pending: 'blue', Resolved: 'green' }
 const priorityColors = { Critical: 'critical', High: 'high', Medium: 'medium', Low: 'low' }
 
@@ -22,13 +25,13 @@ function percent(value, total) {
 
 function MetricCard({ label, value, detail, tone = 'green' }) {
   return (
-    <div className="metric-card dashboard-metric">
-      <div className="metric-label">
-        {label}
-        <span className="metric-icon">↗</span>
+    <div className="metric-card dashboard-metric" style={{ minWidth: 0 }}>
+      <div className="metric-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span className="metric-icon" style={{ flexShrink: 0, marginLeft: '4px' }}>↗</span>
       </div>
-      <div className="metric-value">{value}</div>
-      <div className={`metric-trend ${tone}`}>
+      <div className="metric-value" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      <div className={`metric-trend ${tone}`} style={{ wordBreak: 'break-word', lineHeight: 1.3 }}>
         {tone === 'red' ? '!' : '↑'} <span>{detail}</span>
       </div>
     </div>
@@ -37,21 +40,21 @@ function MetricCard({ label, value, detail, tone = 'green' }) {
 
 function DistributionList({ rows, total, colorKey }) {
   return (
-    <div className="distribution-list">
+    <div className="distribution-list" style={{ minWidth: 0 }}>
       {rows.map((row) => (
-        <div className="distribution-row" key={row.label}>
-          <div className="distribution-label">
-            <i className={`legend-dot ${colorKey ? colorKey(row.label) : row.color}`} />
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
+        <div className="distribution-row" key={row.label} style={{ minWidth: 0 }}>
+          <div className="distribution-label" style={{ minWidth: 0, overflow: 'hidden' }}>
+            <i className={`legend-dot ${colorKey ? colorKey(row.label) : row.color}`} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
+            <strong style={{ flexShrink: 0, marginLeft: 'auto' }}>{row.value}</strong>
           </div>
-          <div className="distribution-track">
+          <div className="distribution-track" style={{ minWidth: 0 }}>
             <span
               className={colorKey ? colorKey(row.label) : row.color}
               style={{ width: `${percent(row.value, total)}%` }}
             />
           </div>
-          <small>{percent(row.value, total)}%</small>
+          <small style={{ flexShrink: 0 }}>{percent(row.value, total)}%</small>
         </div>
       ))}
     </div>
@@ -76,7 +79,6 @@ function Dashboard({ tickets = [], activityLog = [], onOpenTickets }) {
   const resolvedTickets = tickets.filter((ticket) => ticket.status === 'Resolved')
   const calculatedTimes = resolvedTickets.map((ticket, index) => {
     if (Number.isFinite(ticket.resolutionMinutes)) return ticket.resolutionMinutes
-    // Calculate live dynamic minutes based on resolution history or realistic benchmark
     return 35 + (index * 12)
   })
 
@@ -125,7 +127,7 @@ function Dashboard({ tickets = [], activityLog = [], onOpenTickets }) {
 
   return (
     <>
-      <div className="metrics-grid dashboard-metrics-grid">
+      <div className="metrics-grid dashboard-metrics-grid" style={{ minWidth: 0 }}>
         <MetricCard label="Total tickets" value={total} detail="live workspace count" />
         <MetricCard label="Open tickets" value={open} detail="awaiting action" />
         <MetricCard label="Pending tickets" value={pending} detail="waiting on response" />
@@ -154,44 +156,44 @@ function Dashboard({ tickets = [], activityLog = [], onOpenTickets }) {
         />
       </div>
 
-      <div className="dashboard-grid">
-        <section className="panel dashboard-chart-panel">
-          <div className="panel-heading">
-            <div>
+      <div className="dashboard-grid" style={{ minWidth: 0 }}>
+        <section className="panel dashboard-chart-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <h2>Ticket trends</h2>
               <p>Ticket creation recency from the current workspace data</p>
             </div>
-            <span className="chart-caption">{total} tracked</span>
+            <span className="chart-caption" style={{ flexShrink: 0 }}>{total} tracked</span>
           </div>
-          <div className="trend-chart">
+          <div className="trend-chart" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', minWidth: 0, paddingBottom: '6px' }}>
             {trendTickets.map((ticket, index) => (
-              <div className="trend-column" key={ticket.id}>
+              <div className="trend-column" key={ticket.id} style={{ minWidth: '32px' }}>
                 <span className="trend-value">{index + 1}</span>
                 <div className="trend-bar">
                   <span style={{ height: `${((index + 1) / maxTrend) * 100}%` }} />
                 </div>
-                <small>{formatTimeAgo(ticket.created, ticket.createdDate)}</small>
+                <small style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatTimeAgo(ticket.created, ticket.createdDate)}</small>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="panel dashboard-chart-panel">
-          <div className="panel-heading">
-            <div>
+        <section className="panel dashboard-chart-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <h2>Ticket status</h2>
               <p>Current queue distribution</p>
             </div>
-            <strong className="chart-total">{total}</strong>
+            <strong className="chart-total" style={{ flexShrink: 0 }}>{total}</strong>
           </div>
           <DistributionList rows={statuses} total={total} />
         </section>
       </div>
 
-      <div className="dashboard-grid">
-        <section className="panel dashboard-chart-panel">
-          <div className="panel-heading">
-            <div>
+      <div className="dashboard-grid" style={{ minWidth: 0 }}>
+        <section className="panel dashboard-chart-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0 }}>
               <h2>Priority distribution</h2>
               <p>Current urgency across tickets</p>
             </div>
@@ -199,31 +201,31 @@ function Dashboard({ tickets = [], activityLog = [], onOpenTickets }) {
           <DistributionList rows={priorities} total={total} colorKey={(label) => priorityColors[label]} />
         </section>
 
-        <section className="panel dashboard-chart-panel">
-          <div className="panel-heading">
-            <div>
+        <section className="panel dashboard-chart-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0 }}>
               <h2>Agent performance</h2>
               <p>Assigned workload and resolved tickets</p>
             </div>
           </div>
-          <div className="agent-performance-list">
+          <div className="agent-performance-list" style={{ minWidth: 0 }}>
             {agents.length ? (
               agents.map((agent) => (
-                <div className="agent-performance-row" key={agent.assignee}>
-                  <span className="avatar small">
+                <div className="agent-performance-row" key={agent.assignee} style={{ minWidth: 0 }}>
+                  <span className="avatar small" style={{ flexShrink: 0 }}>
                     {agent.assignee
                       .split(' ')
                       .map((part) => part[0])
                       .join('')
                       .slice(0, 2)}
                   </span>
-                  <div>
-                    <strong>{agent.assignee}</strong>
-                    <small>
+                  <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.assignee}</strong>
+                    <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {agent.total} assigned · {agent.resolved} resolved
                     </small>
                   </div>
-                  <b>{agent.rate}%</b>
+                  <b style={{ flexShrink: 0, marginLeft: 'auto' }}>{agent.rate}%</b>
                 </div>
               ))
             ) : (
@@ -233,47 +235,56 @@ function Dashboard({ tickets = [], activityLog = [], onOpenTickets }) {
         </section>
       </div>
 
-      <div className="lower-grid">
-        <section className="panel queue-panel">
-          <div className="panel-heading">
-            <div>
+      <div className="lower-grid" style={{ minWidth: 0 }}>
+        <section className="panel queue-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <h2>Recent tickets</h2>
               <p>Latest records from the ticket workspace</p>
             </div>
-            <button className="text-link" onClick={onOpenTickets}>
+            <button className="text-link" onClick={onOpenTickets} style={{ flexShrink: 0 }}>
               View all <span>→</span>
             </button>
           </div>
           {tickets.slice(0, 5).map((ticket) => (
-            <button className="recent-ticket-row" key={ticket.id} onClick={onOpenTickets}>
-              <span className={`priority-bar ${ticket.priority.toLowerCase()}`} />
-              <span className="row-id">#{ticket.id}</span>
-              <span className="row-subject">
-                <strong>{ticket.subject}</strong>
-                <small>
+            <button 
+              className="recent-ticket-row" 
+              key={ticket.id} 
+              onClick={onOpenTickets}
+              style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}
+            >
+              <span className={`priority-bar ${ticket.priority.toLowerCase()}`} style={{ flexShrink: 0 }} />
+              <span className="row-id" style={{ flexShrink: 0 }}>#{ticket.id}</span>
+              <span className="row-subject" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                  {ticket.subject}
+                </strong>
+                <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                   {ticket.customer} · {ticket.channel}
                 </small>
               </span>
-              <span className={`pill ${ticket.status.toLowerCase()}`}>{ticket.status}</span>
+              <span className={`pill ${ticket.status.toLowerCase()}`} style={{ flexShrink: 0 }}>
+                {ticket.status}
+              </span>
             </button>
           ))}
           {!tickets.length && <div className="dashboard-empty">No tickets have been created yet.</div>}
         </section>
 
-        <section className="panel activity-panel">
-          <div className="panel-heading">
-            <div>
+        <section className="panel activity-panel" style={{ minWidth: 0 }}>
+          <div className="panel-heading" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ minWidth: 0 }}>
               <h2>Recent activity</h2>
               <p>Latest recorded actions</p>
             </div>
           </div>
           {activities.length ? (
             activities.map((activity, index) => (
-              <div className="activity" key={`${activity.action}-${index}`}>
-                <span className="activity-icon green">✓</span>
-                <span>
-                  <strong>{activity.action}</strong>
-                  <small>
+              <div className="activity" key={`${activity.action}-${index}`} style={{ minWidth: 0 }}>
+                <span className="activity-icon green" style={{ flexShrink: 0 }}>✓</span>
+                <span style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                  <strong style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>{activity.action}</strong>
+                  <small style={{ wordBreak: 'break-word' }}>
                     {activity.actor} · {activity.createdAt}
                   </small>
                 </span>

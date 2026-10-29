@@ -15,7 +15,7 @@ function readStorage(key, fallback = []) {
 }
 
 // -------------------------------------------------------------
-// 1. AUTOMATION PAGE COMPONENT (CUSTOM FREE-TEXT RULES)
+// 1. AUTOMATION PAGE COMPONENT (PROFESSIONAL DESIGN & AUTO-RUN)
 // -------------------------------------------------------------
 export function AutomationPage({ rules = [], setRules, onActivity, onRunRules }) {
   const [editingRule, setEditingRule] = useState(null)
@@ -25,6 +25,21 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
     trigger: '',
     action: '',
   })
+
+  // ⚡ LIVE SYNC WORK KARTA RAHEGA BACKGROUND MEIN, LEKIN BINA RE-RENDER / BLINK KIYE
+  useEffect(() => {
+    if (onRunRules) {
+      try { onRunRules(false) } catch {}
+    }
+
+    const interval = setInterval(() => {
+      if (onRunRules) {
+        try { onRunRules(false) } catch {}
+      }
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [rules, onRunRules])
 
   const toggleRule = (ruleId) => {
     const next = (rules || []).map((r) => {
@@ -36,6 +51,7 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
       return r
     })
     if (setRules) setRules(next)
+    if (onRunRules) setTimeout(onRunRules, 50)
   }
 
   const openEdit = (rule) => {
@@ -72,6 +88,7 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
     if (setRules) setRules(next)
     if (onActivity) onActivity(`Updated automation rule: "${form.name}"`)
     setEditingRule(null)
+    if (onRunRules) setTimeout(onRunRules, 50)
   }
 
   const saveNewRule = (e) => {
@@ -96,6 +113,7 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
     if (onActivity) onActivity(`Created automation rule: "${form.name}"`)
     setIsCreating(false)
     setForm({ name: '', trigger: '', action: '' })
+    if (onRunRules) setTimeout(onRunRules, 50)
   }
 
   const deleteRule = (ruleId) => {
@@ -103,19 +121,72 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
     const next = (rules || []).filter((r) => r && r.id !== ruleId)
     if (setRules) setRules(next)
     if (onActivity) onActivity(`Deleted automation rule`)
+    if (onRunRules) setTimeout(onRunRules, 50)
   }
 
   const safeRules = Array.isArray(rules) ? rules.filter(Boolean) : []
 
   return (
-    <div className="automation-layout">
-      <div className="automation-intro">
-        <p className="overline">Operations & Automation Engine</p>
-        <h2>Rules that keep work moving forward.</h2>
-        <p>Custom trigger-action workflows triage tickets, assign agents, escalate SLAs, and notify teams automatically.</p>
-        <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+    <div className="automation-layout" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      {/* Top Banner with Real-time Animation Status (No blinking, Live indicator) */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        borderRadius: '16px',
+        padding: '24px 28px',
+        color: '#ffffff',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px',
+        border: '1px solid #334155',
+        boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.35)'
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚡</span>
+            <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800 }}>
+              Rules that keep work moving forward
+            </h2>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              color: '#34d399',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '0.78rem',
+              fontWeight: 700
+            }}>
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: '#10b981',
+                boxShadow: '0 0 10px #10b981'
+              }} />
+              Auto-Engine Running (Live Sync)
+            </span>
+          </div>
+          <p style={{ margin: '6px 0 0 0', color: '#94a3b8', fontSize: '0.88rem' }}>
+            Custom trigger-action workflows triage tickets, assign agents, escalate SLAs, and notify teams automatically.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
           <button
+            type="button"
             className="primary-button"
+            style={{
+              padding: '10px 20px',
+              borderRadius: '10px',
+              fontWeight: 700,
+              fontSize: '0.9rem',
+              boxShadow: '0 4px 14px rgba(37,99,235,0.4)',
+              cursor: 'pointer'
+            }}
             onClick={() => {
               setForm({ name: '', trigger: '', action: '' })
               setIsCreating(true)
@@ -124,98 +195,300 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
             + Create Automation Rule
           </button>
           {onRunRules && (
-            <button className="secondary-button" onClick={onRunRules}>
+            <button
+              type="button"
+              className="secondary-button"
+              style={{ padding: '10px 16px', borderRadius: '10px', fontWeight: 600, fontSize: '0.88rem', cursor: 'pointer' }}
+              onClick={() => onRunRules(true)}
+              title="Manually trigger an instant rule scan"
+            >
               ⚡ Run Active Rules Now
             </button>
           )}
         </div>
       </div>
 
-      <div className="rule-list">
+      {/* Professional Animated Rule Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
         {safeRules.map((rule) => {
           const isActive = rule.status === 'Active'
+          const ruleTitle = rule.name || 'Automation Rule'
+          const triggerText = rule.trigger || rule.triggerType || 'Any condition'
+          const actionText = rule.action || rule.actionType || 'Any action'
+
           return (
-            <div className="rule-card" key={rule.id || rule.name}>
-              <div className="rule-top">
-                <span className={`rule-status ${isActive ? 'active' : 'paused'}`} />
-                <strong>{rule.name}</strong>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
-                    onClick={() => toggleRule(rule.id)}
-                  >
-                    {isActive ? 'Pause' : 'Activate'}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ padding: '2px 8px', fontSize: '0.75rem', color: '#0284c7' }}
-                    onClick={() => openEdit(rule)}
-                    title="Edit rule"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ padding: '2px 8px', fontSize: '0.75rem', color: '#dc2626' }}
-                    onClick={() => deleteRule(rule.id)}
-                    title="Delete rule"
-                  >
-                    ✕
-                  </button>
+            <div
+              key={rule.id || rule.name}
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: isActive ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                padding: '22px',
+                boxShadow: isActive ? '0 6px 20px rgba(37, 99, 235, 0.07)' : '0 2px 8px rgba(0,0,0,0.03)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '4px',
+                background: isActive ? 'linear-gradient(90deg, #2563eb, #38bdf8)' : '#cbd5e1'
+              }} />
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      background: isActive ? '#10b981' : '#94a3b8',
+                      boxShadow: isActive ? '0 0 8px #10b981' : 'none'
+                    }} />
+                    <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>{ruleTitle}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleRule(rule.id)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: isActive ? '#b45309' : '#15803d',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isActive ? 'Pause' : 'Activate'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(rule)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        background: '#ffffff',
+                        color: '#0284c7',
+                        cursor: 'pointer'
+                      }}
+                      title="Edit rule"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteRule(rule.id)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: '1px solid #fecaca',
+                        background: '#fef2f2',
+                        color: '#dc2626',
+                        cursor: 'pointer'
+                      }}
+                      title="Delete rule"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      background: '#dbeafe',
+                      color: '#1e40af',
+                      fontWeight: 800,
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      letterSpacing: '0.5px'
+                    }}>
+                      WHEN
+                    </span>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#1e293b' }}>
+                      {triggerText}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
+                    <span style={{ color: '#2563eb', fontWeight: 'bold' }}>↳</span>
+                    <span style={{
+                      background: '#ede9fe',
+                      color: '#6d28d9',
+                      fontWeight: 800,
+                      fontSize: '0.72rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      letterSpacing: '0.5px'
+                    }}>
+                      THEN
+                    </span>
+                    <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#334155' }}>
+                      {actionText}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="rule-flow">
-                <span>
-                  <small>WHEN</small>
-                  {rule.trigger || rule.triggerType || 'Any condition'}
+
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderTop: '1px solid #f1f5f9',
+                paddingTop: '12px'
+              }}>
+                <span style={{
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  background: isActive ? '#dcfce7' : '#fef3c7',
+                  color: isActive ? '#15803d' : '#b45309'
+                }}>
+                  ● {rule.status || 'Active'}
                 </span>
-                <b>→</b>
-                <span>
-                  <small>THEN</small>
-                  {rule.action || rule.actionType || 'Any action'}
-                </span>
-              </div>
-              <div className="rule-footer">
-                <span className={`pill ${isActive ? 'open' : 'pending'}`}>{rule.status || 'Active'}</span>
-                <small>{typeof rule.runs === 'number' ? `${rule.runs} runs` : (rule.runs || '0 runs')}</small>
+
+                <small style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 600 }}>
+                  ⚡ {typeof rule.runs === 'number' ? `${rule.runs} runs` : (rule.runs || '0 runs')}
+                </small>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* EDIT MODAL */}
+      {/* ============================================================== */}
+      {/* PROFESSIONAL ULTRA-CLEAN EDIT MODAL (SOLVES BLACK SCREEN ISSUE) */}
+      {/* ============================================================== */}
       {editingRule && (
-        <div className="modal-backdrop" onClick={() => setEditingRule(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', padding: '24px' }}>
-            <div className="modal-header" style={{ marginBottom: '16px' }}>
+        <div
+          onClick={() => setEditingRule(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              width: '100%',
+              maxWidth: '520px',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: '24px 28px 18px 28px',
+              borderBottom: '1px solid #f1f5f9',
+              background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
               <div>
-                <p className="overline" style={{ margin: 0 }}>Rule Builder</p>
-                <h3 style={{ margin: '4px 0 0 0' }}>Edit Automation Rule</h3>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.8px',
+                  color: '#2563eb',
+                  background: '#eff6ff',
+                  padding: '3px 8px',
+                  borderRadius: '6px'
+                }}>
+                  ⚡ Rule Builder
+                </span>
+                <h3 style={{ margin: '6px 0 0 0', fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
+                  Edit Automation Rule
+                </h3>
               </div>
-              <button className="close-button" onClick={() => setEditingRule(null)}>×</button>
+              <button
+                type="button"
+                onClick={() => setEditingRule(null)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  fontSize: '16px',
+                  cursor: 'color',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
             </div>
-            <form onSubmit={saveEdit}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+
+            {/* Modal Form */}
+            <form onSubmit={saveEdit} style={{ padding: '24px 28px' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   Rule Name *
                 </label>
                 <input
                   type="text"
                   required
+                  autoFocus
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. Escalate critical tickets"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   WHEN (Trigger Condition) *
                 </label>
                 <input
@@ -223,13 +496,23 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
                   required
                   value={form.trigger}
                   onChange={(e) => setForm({ ...form, trigger: e.target.value })}
-                  placeholder="e.g. priority is low, SLA risk, unassigned, department is billing..."
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  placeholder="e.g. Priority is Critical or SLA has less than 60 minutes left"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   THEN (Automated Action) *
                 </label>
                 <input
@@ -237,17 +520,54 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
                   required
                   value={form.action}
                   onChange={(e) => setForm({ ...form, action: e.target.value })}
-                  placeholder="e.g. assign to Ahmed Khan, add tag Urgent, resolve ticket..."
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  placeholder="e.g. Assign to Kiran Shah or Add tag Urgent"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="secondary-button" onClick={() => setEditingRule(null)}>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '18px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingRule(null)}
+                  style={{
+                    padding: '11px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#475569',
+                    fontWeight: 600,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer'
+                  }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="primary-button">
-                  Save Changes
+                <button
+                  type="submit"
+                  style={{
+                    padding: '11px 26px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(37,99,235,0.35)'
+                  }}
+                >
+                  Save Changes →
                 </button>
               </div>
             </form>
@@ -255,66 +575,188 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
         </div>
       )}
 
-      {/* CREATE MODAL */}
+      {/* ============================================================== */}
+      {/* PROFESSIONAL ULTRA-CLEAN CREATE MODAL */}
+      {/* ============================================================== */}
       {isCreating && (
-        <div className="modal-backdrop" onClick={() => setIsCreating(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', padding: '24px' }}>
-            <div className="modal-header" style={{ marginBottom: '16px' }}>
+        <div
+          onClick={() => setIsCreating(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '20px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              width: '100%',
+              maxWidth: '520px',
+              borderRadius: '20px',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.4)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+          >
+            <div style={{
+              padding: '24px 28px 18px 28px',
+              borderBottom: '1px solid #f1f5f9',
+              background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
               <div>
-                <p className="overline" style={{ margin: 0 }}>Rule Builder</p>
-                <h3 style={{ margin: '4px 0 0 0' }}>Create New Automation Rule</h3>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.8px',
+                  color: '#2563eb',
+                  background: '#eff6ff',
+                  padding: '3px 8px',
+                  borderRadius: '6px'
+                }}>
+                  ⚡ Rule Builder
+                </span>
+                <h3 style={{ margin: '6px 0 0 0', fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>
+                  Create New Automation Rule
+                </h3>
               </div>
-              <button className="close-button" onClick={() => setIsCreating(false)}>×</button>
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
             </div>
-            <form onSubmit={saveNewRule}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+
+            <form onSubmit={saveNewRule} style={{ padding: '24px 28px' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   Rule Name *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Auto assign billing tickets"
+                  placeholder="e.g. Auto assign critical tickets"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   WHEN (Trigger Condition) *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. priority is high, channel is email, SLA under 1 hour..."
+                  placeholder="e.g. Priority is Critical or SLA under 1 hour..."
                   value={form.trigger}
                   onChange={(e) => setForm({ ...form, trigger: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '22px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   THEN (Automated Action) *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. assign to Ahmed Khan, add tag Escalated, resolve..."
+                  placeholder="e.g. Assign to Kiran Shah, add tag Urgent..."
                   value={form.action}
                   onChange={(e) => setForm({ ...form, action: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button type="button" className="secondary-button" onClick={() => setIsCreating(false)}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '18px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(false)}
+                  style={{
+                    padding: '11px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#475569',
+                    fontWeight: 600,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer'
+                  }}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="primary-button">
-                  Create Rule <span>→</span>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '11px 26px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    fontSize: '0.92rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(37,99,235,0.35)'
+                  }}
+                >
+                  Create Rule →
                 </button>
               </div>
             </form>
@@ -326,7 +768,7 @@ export function AutomationPage({ rules = [], setRules, onActivity, onRunRules })
 }
 
 // -------------------------------------------------------------
-// 2. LIVE CONNECTED WORKSPACE & PROJECT REPORTS PAGE
+// 2. LIVE CONNECTED WORKSPACE & PROJECT REPORTS PAGE (UNTOUCHED)
 // -------------------------------------------------------------
 export function ReportsPage({
   tickets = [],

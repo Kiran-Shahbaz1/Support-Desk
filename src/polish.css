@@ -121,3 +121,47 @@ button:disabled { cursor: not-allowed; opacity: .62; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* =============================================================
+   POLISH MOBILE & PHONE REFINEMENTS
+   ============================================================= */
+@media (max-width: 600px) {
+  .dashboard-metrics-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .trend-chart {
+    height: 160px !important;
+    overflow-x: auto !important;
+    padding-bottom: 10px !important;
+  }
+
+  .trend-column {
+    min-width: 24px !important;
+  }
+
+  .distribution-row {
+    grid-template-columns: 1fr 80px 25px !important;
+    font-size: 10px !important;
+  }
+
+  .drawer-header-actions {
+    justify-content: flex-start !important;
+    width: 100% !important;
+    margin-top: 8px !important;
+  }
+
+  .expanded-ticket-form .form-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .communication-composer-footer {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .communication-composer-footer .primary-button {
+    width: 100% !important;
+    text-align: center !important;
+  }
+}

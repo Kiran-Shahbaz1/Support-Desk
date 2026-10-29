@@ -110,10 +110,12 @@ export const api = {
   getSettings: () => request('/settings'),
   updateSettings: (settings) => request('/settings', { method: 'PATCH', body: settings }),
 
-  // Auth
+  // Auth & Security Verification
   getCurrentUser: () => request('/auth/me'),
-  login: (email) => request('/auth/login', { method: 'POST', body: { email } }),
+  login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   logout: () => request('/auth/logout', { method: 'POST' }),
+  sendSecurityOtp: (email) => request('/auth/send-otp', { method: 'POST', body: { email } }),
+  verifySecurityOtp: (email, code) => request('/auth/verify-otp', { method: 'POST', body: { email, code } }),
 }
 
 export default api
