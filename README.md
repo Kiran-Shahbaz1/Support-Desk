@@ -2,8 +2,8 @@
 
 ---
 ## 📌 Submission Overview & Quick Links
-- **🌐 Live Demo Link:** [https://ticket-management-system-two-sooty.vercel.app/](https://ticket-management-system-two-sooty.vercel.app/)
-- **📂 GitHub Repository:** [https://github.com/wk5629/Ticket-Management-System](https://github.com/wk5629/Ticket-Management-System)
+- **🌐 Live Demo Link:** []()
+- **📂 GitHub Repository:** [https://github.com/Kiran-Shahbaz1/Support-Desk](https://github.com/Kiran-Shahbaz1/Support-Desk)
 ---
 ## 📖 Project Overview
 ### What Problem Does This Application Solve?
