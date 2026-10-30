@@ -1,212 +1,141 @@
-# Ticket Management Architecture
+🎟️ Ticket Management System — Current System Architecture
 
-This document defines the target full-stack architecture while preserving the current Vite React frontend. The current UI remains the first client and is migrated behind API boundaries in stages; it is not rebuilt from scratch.
+System Status: Active Full-Stack Architecture
+Frontend: React + Vite (http://localhost:5173)
+Backend API: Node.js + Express (http://localhost:5001)
+ORM & Database: Prisma ORM + MySQL (localhost:3306)
 
-## Target Repository Layout
-
-```text
+1. High-Level Architecture Diagram
+2. Repository Layout & Directory Structure
+text
 Ticket-management-syatem/
-├─ src/                              # Existing React/Vite frontend (preserve)
-│  ├─ App.jsx                        # Current UI and temporary local workflow
-│  ├─ main.jsx                       # React entrypoint
-│  └─ styles.css                     # Existing design system
-├─ public/                           # Frontend static assets
-├─ server/
-│  └─ src/
-│     ├─ app.js                      # Express app, middleware, route registration
-│     ├─ server.js                   # HTTP server, Socket.IO bootstrap
-│     ├─ config/                     # Environment validation and app settings
-│     ├─ db/                         # Prisma client and transaction helpers
-│     ├─ middleware/                 # Auth, RBAC, validation, errors, rate limits
-│     ├─ modules/                    # Feature modules, each owning its API logic
-│     │  ├─ auth/                    # Login, refresh, logout, password reset
-│     │  ├─ users/                   # Users, roles, departments, teams
-│     │  ├─ tickets/                 # Ticket CRUD, comments, assignments, SLA
-│     │  ├─ customers/               # Customer profiles and portal access
-│     │  ├─ automations/             # Trigger, condition, action rules
-│     │  ├─ notifications/           # In-app, email, and realtime notifications
-│     │  ├─ reports/                 # Aggregations and exports
-│     │  ├─ ai/                      # Command parsing, classification, assistant
-│     │  └─ audit/                   # Immutable audit events
-│     ├─ routes/                     # Versioned route composition only
-│     ├─ services/                   # Cross-module integrations
-│     │  ├─ email/                   # Provider adapter and templates
-│     │  ├─ files/                   # Object storage and file scanning
-│     │  ├─ search/                  # PostgreSQL search/query builders
-│     │  └─ ai/                      # AI provider abstraction
-│     ├─ jobs/                       # BullMQ queues, workers, and processors
-│     │  ├─ sla.worker.js
-│     │  ├─ email.worker.js
-│     │  ├─ notification.worker.js
-│     │  └─ report.worker.js
-│     └─ realtime/                   # Socket.IO namespaces, rooms, event contracts
-├─ prisma/
-│  ├─ schema.prisma                 # PostgreSQL schema source of truth
-│  └─ migrations/                   # Generated, committed migrations
-├─ tests/
-│  ├─ unit/                         # Parsers, policies, services
-│  ├─ integration/                  # Express + PostgreSQL API tests
-│  └─ e2e/                          # Browser workflows against running stack
-├─ docker/
-│  ├─ Dockerfile.web
-│  ├─ Dockerfile.server
-│  └─ docker-compose.yml             # PostgreSQL, Redis, server, web
-├─ .github/workflows/               # CI: install, lint, test, build, migrate check
-├─ .env.example                     # Shared documented variables
-├─ package.json
-└─ ARCHITECTURE.md
-```
+├── src/                                  # Frontend Source (React + Vite)
+│   ├── App.jsx                           # Core Dashboard, Ticket Desk, AI Command Box
+│   ├── main.jsx                          # React DOM Root Entry Point
+│   ├── styles.css                        # Complete Design System (Light/Dark themes)
+│   ├── services/                         # (API client & LocalStorage fallback helpers)
+│   └── components/                       # Modal, Drawer, Table, & Card components
+├── public/                               # Static Frontend Assets
+├── server/                               # Backend Application
+│   ├── src/
+│   │   ├── app.js                        # Express configurations, CORS, Route registration
+│   │   ├── server.js                     # Server entry point (Listening on Port 5001)
+│   │   ├── routes/                       # Express Route Handlers (tickets, users, auth)
+│   │   ├── controllers/                  # Business logic & request validation
+│   │   └── lib/
+│   │       └── prisma.js                 # Prisma Client instance singleton
+├── prisma/
+│   ├── schema.prisma                     # Prisma schema source of truth (MySQL Provider)
+│   └── migrations/                       # Committed database schema migrations
+├── .env                                  # Environment variables (PORT=5001, DATABASE_URL)
+├── index.html                            # HTML5 Template
+├── package.json                          # Dependencies & build scripts
+└── vite.config.js                        # Vite bundler & dev server config
+3. Technology Stack & Specifications
+Layer	Technology	Specification / Configuration
+Frontend Framework	React (v18/19)	Functional Components, Hooks (useState, useEffect, useMemo)
+Build & Dev Tool	Vite	Dev Server running on http://localhost:5173
+Styling & UI	Custom CSS (styles.css)	Custom Design System, Responsive grid, Modal/Drawers
+Client Storage	LocalStorage API	Local ticket cache, offline fallback state
+Backend Runtime	Node.js + Express.js	RESTful JSON API running on Port 5001
+Database ORM	Prisma ORM	Type-safe database queries, schema migrations, introspection
+Database Engine	MySQL (v8.0+)	Relational Database running on default port 3306
+Protocol	HTTP / JSON	RESTful API communication between 5173 and 5001
+4. Database Architecture (Prisma & MySQL Schema)
+Prisma Datasource Configuration (prisma/schema.prisma):
+prisma
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+generator client {
+  provider = "prisma-client-js"
+}
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique
+  role      String    @default("agent") // admin, agent, customer
+  tickets   Ticket[]  @relation("AssignedTickets")
+  comments  Comment[]
+  createdAt DateTime  @default(now())
+}
+model Ticket {
+  id          Int          @id @default(autoincrement())
+  subject     String
+  description String       @db.Text
+  status      TicketStatus @default(OPEN)
+  priority    Priority     @default(MEDIUM)
+  department  String?
+  customer    String
+  email       String
+  assignedTo  User?        @relation("AssignedTickets", fields: [userId], references: [id])
+  userId      Int?
+  comments    Comment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+model Comment {
+  id        Int      @id @default(autoincrement())
+  message   String   @db.Text
+  ticket    Ticket   @fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId  Int
+  user      User?    @fields: [userId], references: [id])
+  userId    Int?
+  createdAt DateTime @default(now())
+}
+5. API Specification & Network Contracts
 
-## Ownership Rules
+All backend routes are served from http://localhost:5001:
 
-- React owns presentation, optimistic UI state, and client-side navigation.
-- Express owns authentication, authorization, validation, business rules, and API contracts.
-- Prisma owns database access; route handlers never query PostgreSQL directly.
-- Feature modules own their controllers, schemas, services, and policies.
-- Redis is used for cache, rate-limit state, Socket.IO adapter state, and BullMQ.
-- BullMQ workers handle SLA checks, email, notifications, exports, and AI tasks outside HTTP requests.
-- Socket.IO publishes ticket, notification, assignment, and SLA events after successful transactions.
-- Audit events are append-only and created by server-side business services.
+Method	Endpoint	Description	Data Handled
+GET	/api/tickets	Fetch all tickets	Returns Array of tickets with status & priorities
+POST	/api/tickets	Create a new ticket	Receives { subject, description, priority, customer, email }
+GET	/api/tickets/:id	Get single ticket details	Returns ticket details with related comments
+PATCH	/api/tickets/:id	Update ticket details	Updates status (OPEN/CLOSED), priority, or assignee
+DELETE	/api/tickets/:id	Delete ticket	Deletes record from MySQL via Prisma
+POST	/api/tickets/:id/comments	Add comment	Adds conversation comment to ticket
+6. End-to-End Execution Workflow
 
-## API Boundary
+User Interaction (Frontend - 5173):
 
-Version all APIs under `/api/v1`.
+User browser mein http://localhost:5173 load karta hai.
+Dashboard aur tickets display hote hain. Agar user koi action kare (e.g. naya ticket create kare ya AI Command run kare), to React state update hoti hai.
 
-```text
-POST   /api/v1/auth/login
-POST   /api/v1/auth/refresh
-POST   /api/v1/auth/logout
-GET    /api/v1/tickets
-POST   /api/v1/tickets
-GET    /api/v1/tickets/:id
-PATCH  /api/v1/tickets/:id
-POST   /api/v1/tickets/:id/comments
-POST   /api/v1/tickets/:id/attachments
-GET    /api/v1/tickets/:id/activity
-GET    /api/v1/reports/summary
-POST   /api/v1/ai/commands
-POST   /api/v1/ai/classify-ticket
-GET    /api/v1/notifications
-```
+Network Request (Frontend ➔ Backend 5001):
 
-The frontend should first call the API through a small client service. Until that service is introduced, the existing LocalStorage adapter remains the fallback.
+React frontend fetch ya axios ke zariye request http://localhost:5001/api/tickets par bhejta hai.
+Express backend CORS allow karta hai (http://localhost:5173 ke liye).
 
-## Data Model Direction
+Data Layer (Backend ➔ Prisma ➔ MySQL 3306):
 
-Core Prisma entities:
+Express Route controller data validate karta hai.
+Prisma Client type-safe query run karta hai:
+javascript
+const tickets = await prisma.ticket.findMany({ include: { assignedTo: true } });
+Data MySQL database mein safely query / persist hota hai.
 
-- `User`, `Role`, `Permission`, `Department`, `Team`
-- `Customer`
-- `Ticket`, `TicketTag`, `Tag`
-- `TicketComment`, `TicketAttachment`
-- `TicketActivity`, `AuditEvent`
-- `SlaPolicy`, `SlaEvent`
-- `AutomationRule`, `AutomationRun`
-- `Notification`
-- `RefreshToken`, `PasswordResetToken`, `EmailVerificationToken`
-- `AiCommand`, `AiClassification`, `AiAssistantMessage`
+Response & Client Sync:
 
-The current ticket object maps approximately as follows:
-
-| Current field | Target ownership |
-|---|---|
-| `id` | `Ticket.id` / public ticket number |
-| `subject`, `description` | `Ticket` |
-| `customer`, `email` | `Customer` relation |
-| `module`, `department` | Ticket taxonomy and department relation |
-| `priority`, `status` | Ticket enums |
-| `assignee` | User relation |
-| `sla`, `dueDate` | SLA policy and SLA event fields |
-| `channel` | Ticket source enum |
-| `tags` | `TicketTag` relation |
-| `comments` | `TicketComment` rows |
-| `history` | `TicketActivity` / `AuditEvent` rows |
-
-## Security Baseline
-
-- Argon2id or bcrypt password hashing
-- Short-lived access JWT plus rotating refresh token
-- RBAC checked server-side on every protected route
-- Zod/Joi request validation
-- Helmet, strict CORS, secure cookies where applicable
-- Rate limiting backed by Redis
-- File type, size, content, and authorization checks
-- Parameterized Prisma queries only
-- Redacted logs and no secrets in client bundles
-- Append-only audit events for sensitive actions
-- CSRF protection if cookie authentication is used
-
-## Migration Plan
-
-### Phase 0: Baseline and contracts
-
-1. Keep the current React layout and LocalStorage behavior working.
-2. Add shared ticket fixtures and API response shapes.
-3. Add unit tests for the current command and ticket transformations.
-4. Remove duplicated/stale VS Code tasks and add one canonical dev/build task.
-
-### Phase 1: Server foundation
-
-1. Add a root/server dependency boundary.
-2. Add Express health endpoint: `GET /health`.
-3. Add environment validation.
-4. Add Prisma client and PostgreSQL connection.
-5. Add Docker Compose for PostgreSQL and Redis.
-6. Add structured error responses and request logging.
-
-### Phase 2: Database and ticket API
-
-1. Create Prisma schema and initial migration.
-2. Import current LocalStorage fixture data through a seed script.
-3. Implement ticket list/detail/create/update APIs.
-4. Add server-side filtering, sorting, pagination, and search.
-5. Add comments, activity, assignments, tags, SLA fields, and attachments metadata.
-
-### Phase 3: Authentication and permissions
-
-1. Add users, roles, permissions, departments, and teams.
-2. Implement login, refresh, logout, password reset, and email verification.
-3. Add protected frontend routes while preserving the existing screen layout.
-4. Enforce RBAC in middleware and module policies.
-
-### Phase 4: Frontend adapter migration
-
-1. Introduce `src/services/apiClient.js`.
-2. Introduce `src/services/ticketService.js` with a LocalStorage fallback.
-3. Replace direct LocalStorage writes with service calls one workflow at a time.
-4. Keep the current dashboard, command box, drawer, and filters visually unchanged.
-5. Add loading, empty, error, retry, and unauthorized states.
-
-### Phase 5: Realtime and async work
-
-1. Add Socket.IO rooms per workspace/ticket.
-2. Publish ticket updates, comments, assignments, and notifications.
-3. Add Redis-backed BullMQ workers for SLA checks, email, notifications, and reports.
-4. Add idempotency keys and retry/dead-letter handling.
-
-### Phase 6: AI and automation
-
-1. Add a provider-neutral AI service boundary.
-2. Store parsed commands and confidence, never execute unvalidated model output directly.
-3. Require schema validation and permission checks before command execution.
-4. Add ticket classification, summaries, suggested replies, duplicate detection, and assistant retrieval.
-5. Add automation triggers, conditions, actions, run history, and safe retry behavior.
-
-### Phase 7: Production readiness
-
-1. Add unit, integration, and Playwright E2E coverage.
-2. Add OpenAPI documentation.
-3. Add CI checks for lint, tests, build, migrations, and dependency audit.
-4. Add Docker production images and deployment configuration.
-5. Add backups, monitoring, error tracking, health/readiness checks, and rollback documentation.
-
-## Preservation Constraints
-
-Do not rewrite the existing frontend as part of backend migration. Preserve:
-
-- Ticket Management / Ticket Desk branding
-- Current sidebar views and dashboard composition
-- AI Command Box placement and interaction
-- Ticket list filters and detail drawer workflow
-- Responsive CSS and current visual language
-- Existing LocalStorage data until the migration adapter is complete
+Backend response JSON format mein return karta hai (200 OK / 201 Created).
+React UI update hoti hai aur backup ke taur par LocalStorage mein sync ho jati hai taake refresh karne par data loss na ho.
+7. Environment Configuration (.env)
+env
+# Backend Server Configuration
+PORT=5001
+# MySQL Database Connection URL (Prisma format)
+DATABASE_URL="mysql://root:YOUR_PASSWORD@localhost:3306/ticket_management"
+# Frontend Origin for CORS
+CLIENT_ORIGIN="http://localhost:5173"

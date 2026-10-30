@@ -404,16 +404,15 @@ Result: 1 passed, 0 failed (100% PASS)
 
   
 
+🏗️ System Architecture & Repository Layout
+
 This application follows a modern dual-layer architecture:
 
+- **Frontend Layer (Vite + React)**: Owns UI presentation, optimistic state, and instant LocalStorage resilience.
+- **Backend API Layer (Express + Prisma)**: Owns data validation, business logic, REST endpoints (`/api/v1`), and MySQL database operations.
 
-  
-
-  
-Frontend Layer (Vite + React): Owns UI presentation, optimistic state, and instant LocalStorage resilience.
-
-  
-Backend API Layer (Express + Prisma): Owns data validation, business logic, REST endpoints (/api/v1), and MySQL database operations.
+> 📖 **Deep Dive Documentation:**  
+> For complete database schema (Prisma models), high-level Mermaid flowcharts, execution lifecycles, and network contracts, please see the full [System Architecture Document (ARCHITECTURE.md)](./ARCHITECTURE.md).
 
   
 
