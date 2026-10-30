@@ -1018,6 +1018,44 @@ try {
     }
   })
 
+  // ========================================================
+  // DIRECT TICKET PATCH/STATUS INTERCEPTOR FOR RESOLVED EMAIL
+  // ========================================================
+  app.patch(['/api/v1/tickets/:id', '/api/tickets/:id'], async (req, res, next) => {
+    try {
+      const id = Number(req.params.id)
+      const body = req.body || {}
+      const newStatus = String(body.status || '').toUpperCase()
+
+      if (newStatus.includes('RESOLV')) {
+        const model = prisma.ticket || prisma.tickets
+        if (model && !isNaN(id)) {
+          const currentTicket = await model.findUnique({
+            where: { id },
+            include: { customer: true }
+          }).catch(() => null)
+
+          const targetEmail = currentTicket?.customer?.email || body.email || currentTicket?.email
+          if (targetEmail && !targetEmail.includes('whatsapp.support') && targetEmail !== 'customer@example.com') {
+            console.log(`\n📧 Ticket #${id} marked as RESOLVED! Sending customer resolution email to: ${targetEmail}...`)
+            sendTicketResolvedEmail({
+              to: targetEmail,
+              ticket: {
+                id,
+                subject: body.subject || currentTicket?.subject || 'Support Ticket',
+                description: body.description || currentTicket?.description || '',
+                status: 'Resolved'
+              }
+            }).catch(e => console.warn('Could not send resolved email:', e.message))
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Resolved interceptor info:', err.message)
+    }
+    return next()
+  })
+
   const server = app.listen(env.PORT, () => {
     console.log(`\n======================================================`)
     console.log(`✓ Support Desk System LIVE on: http://localhost:${env.PORT}`)

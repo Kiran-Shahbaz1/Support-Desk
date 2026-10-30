@@ -18,7 +18,9 @@ const toFormValues = (ticket = {}) => ({
   status: ticket.status || 'Open',
   assignee: ticket.assignee || 'Unassigned',
   department: ticket.department || '',
-  dueDate: ticket.dueDate || '',
+  dueDate: (ticket.dueDate && ticket.dueDate !== 'Not scheduled' && !isNaN(Date.parse(ticket.dueDate)))
+    ? new Date(ticket.dueDate).toISOString().split('T')[0]
+    : '',
   sla: ticket.sla || 'Standard',
 })
 
@@ -188,6 +190,10 @@ export default function TicketDetailProfessional({
       return
     }
 
+    const safeDueDate = (form.dueDate && form.dueDate !== 'Not scheduled' && form.dueDate.trim() !== '')
+      ? form.dueDate
+      : undefined
+
     const updatedData = {
       ...ticket,
       subject: form.subject.trim(),
@@ -200,7 +206,7 @@ export default function TicketDetailProfessional({
       status: canChangeStatus ? form.status : ticket.status,
       assignee: isAdministrator ? form.assignee : ticket.assignee,
       department: canChangeDepartment ? form.department : ticket.department,
-      dueDate: form.dueDate,
+      dueDate: safeDueDate,
       sla: form.sla,
       updatedAt: new Date().toISOString()
     }
@@ -231,7 +237,26 @@ export default function TicketDetailProfessional({
 
       setIsEditing(false)
       setFormError('')
-      api.updateTicket(ticket.id, updatedData).catch(() => {})
+
+      // 🛡️ Strict Schema Payload: Sirf wahi fields bhejenge jo backend schema accept karta hai
+      const allowedPayload = {
+        subject: updatedData.subject,
+        customer: updatedData.customer,
+        email: updatedData.email || '',
+        description: updatedData.description,
+        module: updatedData.module || undefined,
+        category: updatedData.category || undefined,
+        priority: updatedData.priority,
+        status: updatedData.status,
+        assignee: updatedData.assignee || undefined,
+        department: updatedData.department || undefined,
+        sla: updatedData.sla || undefined,
+        dueDate: safeDueDate,
+      }
+
+      api.updateTicket(ticket.id, allowedPayload).catch((err) => {
+        console.error("API update error:", err)
+      })
     } catch (err) {
       console.error('Save failed:', err)
       setFormError('Failed to save ticket changes.')

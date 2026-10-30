@@ -1,4 +1,5 @@
 import asyncHandler from '../utils/asyncHandler.js'
+import { sendTicketResolvedEmail } from '../../emailService.js'
 
 export default class TicketController {
   constructor(ticketService) {
@@ -19,6 +20,29 @@ export default class TicketController {
 
     this.update = asyncHandler(async (request, response) => {
       const ticket = await ticketService.update(request.validated.params.id, request.validated.body)
+
+      // 📧 Check for Resolved Status & Dispatch Email to Customer
+      try {
+        const status = String(request.validated.body?.status || ticket?.status || '').toUpperCase()
+        if (status.includes('RESOLV')) {
+          const customerEmail = ticket?.customer?.email || ticket?.email || ticket?.customerEmail
+          if (customerEmail && !customerEmail.includes('whatsapp.support') && customerEmail !== 'customer@example.com') {
+            console.log(`\n📧 [Ticket #${ticket.id} Resolved] Dispatching resolution email to: ${customerEmail}...`)
+            sendTicketResolvedEmail({
+              to: customerEmail,
+              ticket: {
+                id: ticket.id,
+                subject: ticket.subject || 'Support Ticket',
+                description: ticket.description || '',
+                status: 'Resolved'
+              }
+            }).catch((err) => console.warn('Could not dispatch resolved email:', err.message))
+          }
+        }
+      } catch (emailErr) {
+        console.warn('Resolved email trigger warning:', emailErr.message)
+      }
+
       response.json({ data: ticket })
     })
 
