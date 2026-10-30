@@ -19,6 +19,15 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password123
+          MYSQL_DATABASE: ticket_management
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
     defaults:
       run:
         working-directory: server
@@ -30,4 +39,13 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
-      - run: npm test
+      - name: Setup Prisma Database Schema
+        env:
+          DATABASE_URL: "mysql://root:password123@127.0.0.1:3306/ticket_management"
+        run: npx prisma db push --skip-generate || true
+      - name: Run Backend Tests
+        env:
+          PORT: 5001
+          DATABASE_URL: "mysql://root:password123@127.0.0.1:3306/ticket_management"
+          NODE_ENV: test
+        run: npm test
