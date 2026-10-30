@@ -60,17 +60,11 @@ npm install
 # Start development server
 npm run dev
 
-  
-
 Runs at http://localhost:5173
 
 
-  
-
-  
 2. Backend API & Database Setup
 
-  
 powershell
 # Navigate to server directory
 cd server
@@ -81,107 +75,18 @@ Copy-Item .env.example .env
 # Start development server
 npm run dev
 
-  
-
 Runs at http://localhost:4000 (or http://localhost:5001)
 
-
-  
-
-  
 3. Database Studio (Prisma Visual GUI)
 
-  
 powershell
 # Open live visual database management
 npm --prefix server run db:studio
 
-  
-
 Opens at http://localhost:5555
 
-
-  
-
-  
 📡 REST API Endpoints (/api/v1)
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
 Method	Endpoint	Description
 GET	/health	System status and server health check
 GET	/api/v1/tickets	Search, filter & paginate tickets (?status=Open&priority=High&search=invoice)
@@ -197,102 +102,48 @@ POST	/api/v1/auth/send-otp	Dispatch 6-digit security OTP to agent's email
 POST	/api/v1/auth/verify-otp	Verify 6-digit security OTP for credential reset
 GET	/api/v1/reports/summary	Analytics & KPI aggregations
 
-  
-
-  
 🤖 Intelligent Automation & Email Engine
-
-  
 
 This platform includes an autonomous background automation engine and two-way email processing (Inbound & Outbound).
 
-
-  
 1. Natural Language Automation Engine
-
-  
 
 The background runner evaluates active ticket conditions smoothly without requiring manual clicks or UI flickering.
 
-
-  
-
-  
 Custom Triggers (WHEN): Evaluates priority, SLA status, keywords, channels, or unassigned state (e.g., priority is critical, unassigned, department is finance).
 
-  
 Custom Actions (THEN): Automatically reassigns staff, updates status, sets tags, or triggers manager alerts (e.g., assign to Kiran Shah, add tag Escalated, resolve ticket).
 
-  
 Loop-Safe De-duplication: Automatically prevents repeated execution loops on existing tickets.
 
-  
-
-  
-
-  
 2. 📥 Inbound Email Processing (Email to Ticket)
-
-  
 
 Customers can send an email to your support address, and the system automatically converts it into a ticket.
 
-
-  
-
-  
 Webhook Endpoint: POST /api/inbound-email
 
-  
 Features:
-  
-  
-
   
 Auto-detects urgency keywords (e.g., crash, urgent, down) and assigns Critical or High priority.
 
-  
 Automatically dispatches an instant receipt/acknowledgment email to the sender.
 
-  
-
-  
 Live IMAP Email Listener: Configured in server/inboundEmailListener.js to continuously poll your support inbox.
 
-  
-
-  
-
-  
 3. 📤 Outbound Automated Email Alerts & Security OTP
 
-  
-
-  
 Notification API Endpoint: POST /api/notify-ticket
 
-  
 Security Auth Endpoint: POST /api/v1/auth/send-otp
 
-  
 Default Mode: Runs in test sandbox (Ethereal Email) with live preview URLs, or connects seamlessly to Gmail/Google Workspace via App Passwords.
 
-  
-
-  
-
-  
 ⚙️ Production Email Setup (How to Connect Company Email)
 
-  
 Step 1: Open server/emailService.js
 
-  
+  Replace the test transporter with your company's SMTP server:
 
-Replace the test transporter with your company's SMTP server:
-
-
-  
 javascript
 // Example for Google Workspace / Gmail
 const transporter = nodemailer.createTransport({
@@ -303,15 +154,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-  
 Step 2: Open server/index.js (For Inbound Listener)
 
-  
+  Update the IMAP listener credentials with your dedicated support inbox:
 
-Update the IMAP listener credentials with your dedicated support inbox:
-
-
-  
 javascript
 startInboundEmailListener({
   user: process.env.SUPPORT_EMAIL || 'support@yourcompany.com',
@@ -321,92 +167,47 @@ startInboundEmailListener({
   }
 });
 
-  
-Step 3: Add Credentials to server/.env
+  Step 3: Add Credentials to server/.env
 
-  
 env
 SUPPORT_EMAIL=support@yourcompany.com
 SUPPORT_EMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 
-  
-
-  
 🧪 Automated Testing & Quality Assurance
 
-  
-
-  
 Last Verified Locally: October 2026
-
-  
 Test Environment: Node.js v24, Windows 11, SQLite / MySQL
-
-  
 Overall Status: 100% Passed (21/21 Tests Passing)
 
-  
-
-  
 1. Frontend Command & Automation Tests
 
-  
 powershell
 node --test tests/unit/automationEngine.test.js tests/unit/workspaceCommand.test.js tests/unit/workspaceCommandActions.test.js
-
-  
-
 Result: 14 passed, 0 failed (PASS)
 
-
-  
 2. Backend API Integration Tests
 
-  
 powershell
 npm --prefix server test
-
-  
-
 Result: 6 passed, 0 failed (PASS)
 
-
-  
 3. Production Frontend Build
 
-  
 powershell
 npm run build
-
-  
-
 Result: Passed (Clean build in ~900ms)
 
-
-  
 4. Playwright End-to-End (E2E) Test
 
-  
 powershell
 npx playwright test tests/e2e/ticket-journey.spec.js
-
-  
-
 Result: 1 passed, 0 failed (100% PASS)
 
-
-  
-
-  
 🏗️ System Architecture & Repository Layout
 
-  
-
-🏗️ System Architecture & Repository Layout
-
-This application follows a modern dual-layer architecture:
+  This application follows a modern dual-layer architecture:
 
 - **Frontend Layer (Vite + React)**: Owns UI presentation, optimistic state, and instant LocalStorage resilience.
 - **Backend API Layer (Express + Prisma)**: Owns data validation, business logic, REST endpoints (`/api/v1`), and MySQL database operations.
@@ -414,9 +215,6 @@ This application follows a modern dual-layer architecture:
 > 📖 **Deep Dive Documentation:**  
 > For complete database schema (Prisma models), high-level Mermaid flowcharts, execution lifecycles, and network contracts, please see the full [System Architecture Document (ARCHITECTURE.md)](./ARCHITECTURE.md).
 
-  
-
-  
 text
 Ticket-Management-System/
 ├── src/                               # Frontend Presentation Layer (React + Vite)
