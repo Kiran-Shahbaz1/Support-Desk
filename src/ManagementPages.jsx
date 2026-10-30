@@ -456,18 +456,17 @@ function EntityPage({ kind, records, setRecords, tickets, departments = [], onOp
     const cleanName = (record.name || '').trim().toLowerCase()
     const cleanEmail = (record.email || '').trim().toLowerCase()
 
+    // 🔒 Bulletproof Existence Check: ID first, then Name
     const exists = (records || []).some((item) =>
       String(item.id) === cleanId ||
-      ((item.name || '').trim().toLowerCase() === cleanName) ||
-      ((item.email || '').trim().toLowerCase() === cleanEmail)
+      ((item.name || '').trim().toLowerCase() === cleanName)
     )
 
     const updatedRecords = exists 
       ? records.map((item) => {
           const idMatches = String(item.id) === cleanId
           const nameMatches = (item.name || '').trim().toLowerCase() === cleanName
-          const emailMatches = (item.email || '').trim().toLowerCase() === cleanEmail
-          return (idMatches || nameMatches || emailMatches) ? { ...item, ...record, id: item.id || record.id } : item
+          return (idMatches || nameMatches) ? { ...item, ...record, id: item.id || record.id } : item
         }) 
       : [record, ...records]
     
@@ -483,15 +482,13 @@ function EntityPage({ kind, records, setRecords, tickets, departments = [], onOp
 
         const staffExists = staffList.some((s) =>
           String(s.id) === cleanId ||
-          (s.name && s.name.trim().toLowerCase() === cleanName) ||
-          (s.email && s.email.trim().toLowerCase() === cleanEmail)
+          (s.name && s.name.trim().toLowerCase() === cleanName)
         )
 
         if (staffExists) {
           staffList = staffList.map((s) => {
             const matches = String(s.id) === cleanId ||
-              (s.name && s.name.trim().toLowerCase() === cleanName) ||
-              (s.email && s.email.trim().toLowerCase() === cleanEmail)
+              (s.name && s.name.trim().toLowerCase() === cleanName)
             return matches ? { ...s, ...record, id: s.id || record.id } : s
           })
         } else {
@@ -499,13 +496,14 @@ function EntityPage({ kind, records, setRecords, tickets, departments = [], onOp
         }
         localStorage.setItem('relay:staff-members', JSON.stringify(staffList))
 
+        // 🔒 Realtime Auth Sync: Agar admin ya agent login hai to credentials update karo
         const curUserRaw = localStorage.getItem('relay:current-user')
         if (curUserRaw) {
           const curUser = JSON.parse(curUserRaw)
           if (
             String(curUser.id) === cleanId ||
-            curUser.email?.toLowerCase() === cleanEmail ||
-            curUser.name?.toLowerCase() === cleanName
+            curUser.name?.toLowerCase() === cleanName ||
+            curUser.email?.toLowerCase() === cleanEmail
           ) {
             localStorage.setItem('relay:current-user', JSON.stringify({
               ...curUser,
@@ -514,6 +512,15 @@ function EntityPage({ kind, records, setRecords, tickets, departments = [], onOp
               password: record.password
             }))
           }
+        }
+
+        // Agar admin ne apna password change kiya ho to admin-account me bhi save karo
+        if (record.role === 'Administrator' || cleanEmail.includes('admin')) {
+          localStorage.setItem('relay:admin-account', JSON.stringify({
+            name: record.name,
+            email: record.email,
+            password: record.password
+          }))
         }
 
         window.dispatchEvent(new Event('storage'))

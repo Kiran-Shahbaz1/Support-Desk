@@ -483,7 +483,19 @@ try {
       const cleanEmail = (email || '').trim().toLowerCase()
       const enteredCode = String(code || '').trim()
 
-      const record = activeSecurityOtps.get(cleanEmail)
+      // 1. Direct email match check karein
+      let record = activeSecurityOtps.get(cleanEmail)
+
+      // 2. Agar email change hone ki wajah se direct na mile, to active valid OTPs me check karein
+      if (!record) {
+        for (const [storedEmail, otpData] of activeSecurityOtps.entries()) {
+          if (otpData.code === enteredCode && Date.now() <= otpData.expiresAt) {
+            record = otpData
+            break
+          }
+        }
+      }
+
       if (!record) {
         return res.status(400).json({ success: false, error: { message: 'No verification code found. Please request a new code.' } })
       }
@@ -498,7 +510,7 @@ try {
       }
 
       // Consumed successfully
-      activeSecurityOtps.delete(cleanEmail)
+      activeSecurityOtps.clear()
       return res.json({ success: true, message: 'Identity verified successfully.' })
     } catch (err) {
       return res.status(500).json({ success: false, error: { message: err.message } })
